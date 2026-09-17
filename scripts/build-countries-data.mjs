@@ -83,16 +83,28 @@
 //    Netherlands' three, again) never has anything removed regardless of
 //    its size.
 //
-// 5. Dropping orphan interior holes. A handful of real enclaves (Llívia, a
-//    Spanish town entirely surrounded by France, the same way Vatican
-//    City/San Marino sit inside Italy) exist in the source only as a hole
-//    cut into the surrounding country's polygon, with no separate filled
-//    shape for the enclave itself. When another of our countries fills that
-//    hole exactly — Vatican City, San Marino, Lesotho-in-South-Africa — the
-//    two shapes sit flush and it reads as one seamless coastline, so those
-//    holes are left alone. When nothing fills it, like Llívia, the hole just
-//    exposes bare ocean color for no visible reason, so it's dropped
-//    instead, letting the surrounding country's own color show through.
+// 5. Reassigning or dropping orphan interior holes. Some real enclaves
+//    (Vatican City/San Marino sitting inside Italy, Lesotho inside South
+//    Africa) exist in the source as a hole cut into the surrounding
+//    country's polygon *and* as their own separately filled shape, so the
+//    two sit flush and it reads as one seamless coastline. Others, like
+//    Llívia — a Spanish town entirely surrounded by France — exist only as
+//    the hole, with no separate filled shape for the enclave itself; left
+//    alone that just exposes bare ocean color for no visible reason. Known
+//    cases like Llívia are given their real owner as a new disjoint piece of
+//    that country's own shape, reusing the hole ring itself (it already
+//    traces the enclave's true boundary) rather than dropping it. Any other
+//    unrecognized orphan hole — one this script doesn't have a named owner
+//    for — is dropped instead, letting the surrounding country's own color
+//    fill it in.
+//
+// 6. Adding Vatican City. Natural Earth's admin-0 map subunits layer (the
+//    source this whole script is built on) carries a "Vatican" entry with
+//    no geometry at all attached — not a hole in Italy, not a filled shape,
+//    nothing. Their plainer admin-0 *countries* layer does have a real
+//    polygon for it, so that one small shape is hardcoded below and added
+//    as its own feature, rather than switching this whole pipeline to a
+//    different source just for one country.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -123,8 +135,8 @@ const SOVEREIGNTY_OVERRIDES = {
   // strip to the *other* country, so both disclaim it instead. There's no
   // "US-recognized" side here either, but leaving it unresolved just shows
   // as a hole in the map between two countries that do exist, so it's
-  // folded into Egypt, which has the closer administrative presence.
-  'Bir Tawil': 'Egypt',
+  // folded into Sudan instead.
+  'Bir Tawil': 'Sudan',
 
   // Everything below merges an internal administrative subdivision into its
   // one sovereign country, so the list of selectable countries matches a
@@ -363,16 +375,48 @@ function subPolygonsOf(geometry) {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
 }
 
-// See part 5 in the header comment above.
-function dropOrphanHoles(features) {
-  const exteriorBounds = features.flatMap((f) => subPolygonsOf(f.geometry).map((rings) => simpleBounds(rings[0])))
+// Reversing point order flips a ring's winding direction — needed to turn a
+// hole (wound opposite its parent's exterior ring) into a standalone filled
+// exterior ring for its own feature.
+function reversedRing(ring) {
+  return ring.slice().reverse()
+}
 
-  return features.map((f) => {
+// Orphan holes with a real, known owner: the hole traces the enclave's true
+// boundary, so instead of being dropped it's added as a new disjoint piece
+// of the owner's own shape. `near` is an approximate [lng, lat] used only to
+// pick the right hole out of whichever country it's cut into.
+const ENCLAVE_HOLE_OWNERS = [{ holeIn: 'France', owner: 'Spain', near: [1.97, 42.46] }]
+const ENCLAVE_MATCH_TOLERANCE_DEG = 0.5
+
+// See parts 5 and 6 in the header comment above.
+function fixOrphanHoles(features) {
+  const exteriorBounds = features.flatMap((f) => subPolygonsOf(f.geometry).map((rings) => simpleBounds(rings[0])))
+  const enclavesByOwner = new Map()
+
+  const withHolesFixed = features.map((f) => {
     const subPolygons = subPolygonsOf(f.geometry).map((rings) => {
       if (rings.length === 1) return rings
       const [exterior, ...holes] = rings
-      const filledHoles = holes.filter((hole) => exteriorBounds.some((b) => boundsClose(b, simpleBounds(hole))))
-      return [exterior, ...filledHoles]
+      const keptHoles = holes.filter((hole) => {
+        const holeBounds = simpleBounds(hole)
+        if (exteriorBounds.some((b) => boundsClose(b, holeBounds))) return true
+
+        const [minLng, minLat, maxLng, maxLat] = holeBounds
+        const center = [(minLng + maxLng) / 2, (minLat + maxLat) / 2]
+        const enclave = ENCLAVE_HOLE_OWNERS.find(
+          (e) =>
+            e.holeIn === f.properties.NAME &&
+            Math.hypot(e.near[0] - center[0], e.near[1] - center[1]) < ENCLAVE_MATCH_TOLERANCE_DEG,
+        )
+        if (enclave) {
+          const pieces = enclavesByOwner.get(enclave.owner) ?? []
+          pieces.push([reversedRing(hole)])
+          enclavesByOwner.set(enclave.owner, pieces)
+        }
+        return false
+      })
+      return [exterior, ...keptHoles]
     })
     return {
       ...f,
@@ -382,6 +426,34 @@ function dropOrphanHoles(features) {
           : { type: 'MultiPolygon', coordinates: subPolygons },
     }
   })
+
+  return withHolesFixed.map((f) => {
+    const extraPieces = enclavesByOwner.get(f.properties.NAME)
+    if (!extraPieces) return f
+    return { ...f, geometry: { type: 'MultiPolygon', coordinates: [...subPolygonsOf(f.geometry), ...extraPieces] } }
+  })
+}
+
+// See part 6 in the header comment above — hardcoded from Natural Earth's
+// admin-0 countries layer since the map-subunits source this script
+// otherwise uses has no geometry for Vatican City at all.
+const VATICAN_CITY_FEATURE = {
+  type: 'Feature',
+  properties: { NAME: 'Vatican City' },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [12.453137, 41.902752],
+        [12.452714, 41.903016],
+        [12.452767, 41.903439],
+        [12.453031, 41.903915],
+        [12.453983, 41.903862],
+        [12.454035, 41.902752],
+        [12.453137, 41.902752],
+      ],
+    ],
+  },
 }
 
 function simplify(inputFiles, command) {
@@ -418,7 +490,10 @@ const simplifiedFeatures = feature(
 ).features
 
 const dropped = simplifiedFeatures.filter((f) => !f.geometry).map((f) => f.properties.NAME)
-const reduced = dropOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets))
+const reduced = [
+  ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)),
+  VATICAN_CITY_FEATURE,
+]
 
 const ringsBefore = simplifiedFeatures.reduce(
   (sum, f) => sum + (f.geometry ? (f.geometry.type === 'Polygon' ? 1 : f.geometry.coordinates.length) : 0),
@@ -428,7 +503,12 @@ const ringsAfter = reduced.reduce((sum, f) => sum + (f.geometry.type === 'Polygo
 
 const final = await simplify(
   { 'reduced.json': JSON.stringify({ type: 'FeatureCollection', features: reduced }) },
-  '-i reduced.json -rename-layers countries -o format=topojson quantization=1e5 out.json',
+  // Higher quantization than the first pass: by now the data's already down
+  // to ~1100 rings, so the extra precision costs very little extra file
+  // size, but 1e5 (~400m grid cells at the equator) was fine enough to
+  // silently collapse Vatican City's ~150m width to a degenerate, geometry-
+  // less feature. 1e7 (~4m cells) comfortably resolves it.
+  '-i reduced.json -rename-layers countries -o format=topojson quantization=1e7 out.json',
 )
 
 writeFileSync(outPath, final['out.json'])
