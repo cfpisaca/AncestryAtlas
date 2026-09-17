@@ -77,6 +77,11 @@
 //    (~9600 points) alone took over 10 seconds to build a cap mesh for.
 //    Since it's never selected or zoomed into, the extra simplification
 //    costs nothing visible at the whole-globe scale it's actually seen at.
+//    Before that pass runs, its ring also gets stripped of flat-map "closing
+//    edge" points (see stripMapEdgePoints below) — otherwise those render as
+//    a visible spike from the coast through the pole and back, since points
+//    that are only distinct on a rectangular projection collapse to the same
+//    physical point on a real sphere.
 //
 // 4. Dropping insignificant islet rings from many-island countries. Natural
 //    Earth's per-country shapes include every tiny skerry as its own
@@ -500,12 +505,42 @@ const simplifiedFeatures = feature(
 // See part 3 in the header comment above.
 const ANTARCTICA_SIMPLIFY_PERCENT = '10%'
 
+// Natural Earth's Antarctica ring closes by tracing along the literal edges
+// of a flat rectangular map — a run of points at exactly lat=-90 regardless
+// of longitude (the map's bottom edge), and a matching "there and back" run
+// along lng=180 then lng=-180 (the map's two side edges, which are the same
+// meridian). Both are correct and invisible on a flat projection, but every
+// point in a lat=-90 run is the identical physical point on a sphere, and
+// lng=180/-180 are the identical meridian — so on the actual 3D globe this
+// renders as a visible spike from the coast down through the pole and back,
+// not a real coastline feature. Stripping them and reconnecting the real
+// coastline points on either side removes the spike with no loss of actual
+// coastline detail (these points never described real terrain).
+function stripMapEdgePoints(ring) {
+  const filtered = ring.filter(([lng, lat]) => lat > -89.99 && Math.abs(lng) < 179.99)
+  if (filtered.length < 4) return ring
+  const [firstLng, firstLat] = filtered[0]
+  const [lastLng, lastLat] = filtered[filtered.length - 1]
+  if (firstLng !== lastLng || firstLat !== lastLat) filtered.push(filtered[0])
+  return filtered
+}
+
 async function simplifyAntarctica(features) {
   const index = features.findIndex((f) => f.properties.NAME === 'Antarctica')
   if (index === -1) return features
 
+  const antarctica = features[index]
+  const cleanedSubPolygons = subPolygonsOf(antarctica.geometry).map((rings) => rings.map(stripMapEdgePoints))
+  const cleanedAntarctica = {
+    ...antarctica,
+    geometry:
+      antarctica.geometry.type === 'Polygon'
+        ? { type: 'Polygon', coordinates: cleanedSubPolygons[0] }
+        : { type: 'MultiPolygon', coordinates: cleanedSubPolygons },
+  }
+
   const out = await simplify(
-    { 'in.json': JSON.stringify({ type: 'FeatureCollection', features: [features[index]] }) },
+    { 'in.json': JSON.stringify({ type: 'FeatureCollection', features: [cleanedAntarctica] }) },
     `-i in.json -simplify ${ANTARCTICA_SIMPLIFY_PERCENT} keep-shapes -clean rewind -o format=geojson out.json`,
   )
   const [simplifiedAntarctica] = JSON.parse(out['out.json']).features
