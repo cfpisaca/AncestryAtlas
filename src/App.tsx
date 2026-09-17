@@ -112,7 +112,7 @@ function App() {
   const [selectedName, setSelectedName] = useState('')
 
   useEffect(() => {
-    fetch('/data/countries.json')
+    fetch(`${import.meta.env.BASE_URL}data/countries.json`)
       .then((res) => res.json())
       .then((topology: Topology) => {
         const collection = feature(topology, topology.objects.countries as GeometryCollection)
