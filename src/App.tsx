@@ -19,10 +19,12 @@ const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
 const LAND_MATERIAL = new MeshBasicMaterial({ color: '#3fae8f' })
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const SELECTED_MATERIAL = new MeshBasicMaterial({ color: '#f2b134' })
-const SELECTED_SIDE_MATERIAL = new MeshBasicMaterial({ color: '#040a09', transparent: true, opacity: 0.35 })
 const SELECTED_BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
-const HIGHLIGHT_ALTITUDE = POLYGON_ALTITUDE + 0.002 // sits just above the base land layer so it isn't z-fought
+// A hair above the base land layer's own altitude — not a visible "raise",
+// just enough that the highlight's coplanar cap doesn't z-fight with the
+// base layer underneath it.
+const HIGHLIGHT_ALTITUDE = POLYGON_ALTITUDE + 0.00004
 
 function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
@@ -68,7 +70,6 @@ function buildCountryLayer(
   altitude: number,
   capMaterial: MeshBasicMaterial,
   borderMaterial: LineBasicMaterial,
-  sideMaterial?: MeshBasicMaterial,
 ): Group {
   const topRadius = radius * (1 + altitude)
   // Only a hair above the cap — enough to avoid z-fighting, but small enough
@@ -78,27 +79,18 @@ function buildCountryLayer(
   // the actual edge the closer and more obliquely you look at it).
   const borderRadius = radius * (1 + altitude + 0.00002)
 
-  // Cap and side geometry are built as fully separate meshes rather than one
-  // multi-material mesh: mergeGeometries(..., useGroups: false) — needed so
-  // every ring collapses into a single draw call instead of one per input —
-  // discards each ConicPolygonGeometry's own cap/side material groups, so a
-  // merged multi-material mesh would silently render every ring with just
-  // one of the two materials.
   const capGeometries = []
-  const sideGeometries = []
   const borderGeometries = []
   for (const country of countries) {
     for (const ring of ringsOf(country.geometry)) {
       const res = curvatureResolutionFor(ring)
       capGeometries.push(new ConicPolygonGeometry(ring, 0, topRadius, false, true, false, res))
-      if (sideMaterial) sideGeometries.push(new ConicPolygonGeometry(ring, 0, topRadius, false, false, true, res))
       borderGeometries.push(new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, borderRadius, res))
     }
   }
 
   const group = new Group()
   group.add(new Mesh(mergeGeometries(capGeometries, false), capMaterial))
-  if (sideMaterial) group.add(new Mesh(mergeGeometries(sideGeometries, false), sideMaterial))
   group.add(new LineSegments(mergeGeometries(borderGeometries, false), borderMaterial))
   return group
 }
@@ -194,7 +186,6 @@ function App() {
       HIGHLIGHT_ALTITUDE,
       SELECTED_MATERIAL,
       SELECTED_BORDER_MATERIAL,
-      SELECTED_SIDE_MATERIAL,
     )
     worldGroup.add(highlight)
     highlightRef.current = highlight
