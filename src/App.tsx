@@ -8,6 +8,7 @@ import { BufferAttribute, Color, Group, LineBasicMaterial, LineSegments, Mesh, M
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import ConicPolygonGeometry from 'three-conic-polygon-geometry'
 import GeoJsonGeometry from 'three-geojson-geometry'
+import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER } from './continents'
 
 interface CountryProperties {
   NAME: string
@@ -196,14 +197,27 @@ function App() {
     worldLayerRef.current = { colorAttribute, rangesByName }
   }, [countries])
 
+  // Antarctica is part of `countries` (so it still renders on the globe) but
+  // isn't in CONTINENT_BY_COUNTRY, so it's excluded here — it's shown on the
+  // map but isn't a selectable country.
   const countryByName = useMemo(
-    () => new Map(countries.map((country) => [country.properties.NAME, country])),
+    () => new Map(countries.filter((c) => c.properties.NAME in CONTINENT_BY_COUNTRY).map((c) => [c.properties.NAME, c])),
     [countries],
   )
   const countryNames = useMemo(
     () => [...countryByName.keys()].sort((a, b) => a.localeCompare(b)),
     [countryByName],
   )
+  const countryNamesByContinent = useMemo(() => {
+    const groups = new Map<string, string[]>()
+    for (const name of countryNames) {
+      const continent = CONTINENT_BY_COUNTRY[name]
+      const list = groups.get(continent) ?? []
+      list.push(name)
+      groups.set(continent, list)
+    }
+    return groups
+  }, [countryNames])
 
   useEffect(() => {
     const worldLayer = worldLayerRef.current
@@ -254,11 +268,19 @@ function App() {
         }}
       >
         <option value="">All countries</option>
-        {countryNames.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
+        {CONTINENT_ORDER.map((continent) => {
+          const names = countryNamesByContinent.get(continent)
+          if (!names) return null
+          return (
+            <optgroup key={continent} label={continent}>
+              {names.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </optgroup>
+          )
+        })}
       </select>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>

@@ -69,6 +69,14 @@
 //    Eustatius/Saba, in particular) to lose their smaller islands entirely —
 //    mapshaper's `keep-shapes` flag only guarantees a *feature* survives
 //    simplification, not that every one of its separate islands does.
+//    Antarctica gets a second, much more aggressive simplification pass on
+//    top of this one (see ANTARCTICA_SIMPLIFY_PERCENT below) — its coastline
+//    is far more geometrically complex than anywhere else in the dataset,
+//    and ConicPolygonGeometry's triangulation scales roughly quadratically
+//    with ring size, so left at this pass's normal 50% its largest ring
+//    (~9600 points) alone took over 10 seconds to build a cap mesh for.
+//    Since it's never selected or zoomed into, the extra simplification
+//    costs nothing visible at the whole-globe scale it's actually seen at.
 //
 // 4. Dropping insignificant islet rings from many-island countries. Natural
 //    Earth's per-country shapes include every tiny skerry as its own
@@ -317,15 +325,11 @@ const UNCLAIMED_OR_DISPUTED_NAMES = [
   'Spratly Is.',
 ]
 
-// Dropped outright, not merged anywhere: Antarctica and its uninhabited
-// claimed islands (no country of their own, and no genealogical relevance
-// either way), plus UNCLAIMED_OR_DISPUTED_NAMES above.
-const EXCLUDED_NAMES = new Set([
-  'Antarctica',
-  'S. Orkney Is.',
-  'Peter I I.',
-  ...UNCLAIMED_OR_DISPUTED_NAMES,
-])
+// Dropped outright, not merged anywhere: a couple of small uninhabited
+// Antarctic-claim islands (no country of their own, and no genealogical
+// relevance either way — Antarctica's own mainland is kept, see below),
+// plus UNCLAIMED_OR_DISPUTED_NAMES above.
+const EXCLUDED_NAMES = new Set(['S. Orkney Is.', 'Peter I I.', ...UNCLAIMED_OR_DISPUTED_NAMES])
 
 const SIMPLIFY_PERCENT = '50%'
 const RING_COUNT_THRESHOLD = 10
@@ -482,7 +486,7 @@ const simplifyCommand =
   `-dissolve NAME copy-fields=NAME ` + // welds each renamed subunit into its target country's shape, since they share topology
   `-simplify ${SIMPLIFY_PERCENT} keep-shapes ` +
   `-clean rewind ` + // simplification can leave a handful of self-intersecting/mis-wound rings, which triangulate with visible gaps
-  `-filter "${excludeExpr}" ` + // Antarctica wraps almost the full 360° of longitude near the pole; none of these have any genealogical relevance anyway
+  `-filter "${excludeExpr}" ` + // a few small uninhabited islands/unclaimed areas with no genealogical relevance
   `-filter-fields NAME ` +
   `-o format=topojson quantization=1e5 out.json`
 
@@ -493,11 +497,26 @@ const simplifiedFeatures = feature(
   simplifiedTopology.objects[Object.keys(simplifiedTopology.objects)[0]],
 ).features
 
+// See part 3 in the header comment above.
+const ANTARCTICA_SIMPLIFY_PERCENT = '10%'
+
+async function simplifyAntarctica(features) {
+  const index = features.findIndex((f) => f.properties.NAME === 'Antarctica')
+  if (index === -1) return features
+
+  const out = await simplify(
+    { 'in.json': JSON.stringify({ type: 'FeatureCollection', features: [features[index]] }) },
+    `-i in.json -simplify ${ANTARCTICA_SIMPLIFY_PERCENT} keep-shapes -clean rewind -o format=geojson out.json`,
+  )
+  const [simplifiedAntarctica] = JSON.parse(out['out.json']).features
+  return features.map((f, i) => (i === index ? simplifiedAntarctica : f))
+}
+
 const dropped = simplifiedFeatures.filter((f) => !f.geometry).map((f) => f.properties.NAME)
-const reduced = [
+const reduced = await simplifyAntarctica([
   ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)),
   VATICAN_CITY_FEATURE,
-]
+])
 
 const ringsBefore = simplifiedFeatures.reduce(
   (sum, f) => sum + (f.geometry ? (f.geometry.type === 'Polygon' ? 1 : f.geometry.coordinates.length) : 0),
