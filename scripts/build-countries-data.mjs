@@ -122,6 +122,11 @@ const SOVEREIGNTY_OVERRIDES = {
   'W. Sahara': 'Morocco',
   Somaliland: 'Somalia',
   'N. Cyprus': 'Cyprus',
+  // The UN buffer zone dividing Northern Cyprus from the rest of the
+  // island — since Northern Cyprus itself is already folded into Cyprus
+  // above, leaving this as its own excluded strip just cut a blank line
+  // through the middle of the country it now belongs to.
+  'Cyprus U.N. Buffer Zone': 'Cyprus',
   // The US takes no recognition position on Kashmir at all (long-standing
   // policy is neutral, deferring to bilateral India-Pakistan resolution),
   // so unlike the cases above there's no "US-recognized" side to move this
@@ -306,7 +311,6 @@ const SOVEREIGNTY_OVERRIDES = {
 const UNCLAIMED_OR_DISPUTED_NAMES = [
   'Bajo Nuevo Bank',
   'Brazilian I.',
-  'Cyprus U.N. Buffer Zone',
   'Scarborough Reef',
   'Serranilla Bank',
   'Southern Patagonian Ice Field',

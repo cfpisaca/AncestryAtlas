@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { geoArea, geoCentroid } from 'd3'
+import { geoArea, geoBounds, geoCentroid } from 'd3'
 import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import Globe, { type GlobeInstance } from 'globe.gl'
 import { feature } from 'topojson-client'
@@ -36,6 +36,25 @@ const FINE_CURVATURE_AREA_KM2 = 2000
 function curvatureResolutionFor(ring: Position[][]): number {
   const areaKm2 = geoArea({ type: 'Polygon', coordinates: ring }) * EARTH_RADIUS_KM * EARTH_RADIUS_KM
   return areaKm2 < FINE_CURVATURE_AREA_KM2 ? 1 : 5
+}
+
+const DEFAULT_FLY_ALTITUDE = 1.4
+const MIN_FLY_ALTITUDE = 0.01
+// Tuned so a France-sized country (~1000km across) lands at roughly the
+// previous fixed altitude, while a country the size of Vatican City (a few
+// hundred meters) gets clamped to MIN_FLY_ALTITUDE instead of an altitude so
+// large the country is sub-pixel — at a fixed 1.4 for every country
+// regardless of size, tiny nations were indistinguishable from whatever
+// larger country surrounds them.
+const FLY_ALTITUDE_SCALE_KM = 700
+
+function altitudeForCountry(country: CountryFeature): number {
+  const [[minLng, minLat], [maxLng, maxLat]] = geoBounds(country)
+  const avgLatRad = ((minLat + maxLat) / 2) * (Math.PI / 180)
+  const widthKm = (maxLng - minLng) * 111 * Math.cos(avgLatRad)
+  const heightKm = (maxLat - minLat) * 111
+  const diagonalKm = Math.hypot(widthKm, heightKm)
+  return Math.min(DEFAULT_FLY_ALTITUDE, Math.max(MIN_FLY_ALTITUDE, diagonalKm / FLY_ALTITUDE_SCALE_KM))
 }
 
 // Builds one merged land mesh plus one merged border-line object for all
@@ -212,7 +231,7 @@ function App() {
 
     globe.controls().autoRotate = false
     const [lng, lat] = geoCentroid(country)
-    globe.pointOfView({ lat, lng, altitude: 1.4 }, 1200)
+    globe.pointOfView({ lat, lng, altitude: altitudeForCountry(country) }, 1200)
   }
 
   return (
