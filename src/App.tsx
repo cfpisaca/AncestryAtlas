@@ -8,7 +8,7 @@ import { BufferAttribute, Color, Group, LineBasicMaterial, LineSegments, Mesh, M
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import ConicPolygonGeometry from 'three-conic-polygon-geometry'
 import GeoJsonGeometry from 'three-geojson-geometry'
-import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER } from './continents'
+import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT } from './continents'
 
 interface CountryProperties {
   NAME: string
@@ -275,7 +275,7 @@ function App() {
             <optgroup key={continent} label={continent}>
               {names.map((name) => (
                 <option key={name} value={name}>
-                  {name}
+                  {TERRITORY_PARENT[name] ? `${name} (${TERRITORY_PARENT[name]})` : name}
                 </option>
               ))}
             </optgroup>
