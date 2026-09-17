@@ -82,6 +82,17 @@
 //    small nation that's naturally made of a few islands (Caribbean
 //    Netherlands' three, again) never has anything removed regardless of
 //    its size.
+//
+// 5. Dropping orphan interior holes. A handful of real enclaves (Llívia, a
+//    Spanish town entirely surrounded by France, the same way Vatican
+//    City/San Marino sit inside Italy) exist in the source only as a hole
+//    cut into the surrounding country's polygon, with no separate filled
+//    shape for the enclave itself. When another of our countries fills that
+//    hole exactly — Vatican City, San Marino, Lesotho-in-South-Africa — the
+//    two shapes sit flush and it reads as one seamless coastline, so those
+//    holes are left alone. When nothing fills it, like Llívia, the hole just
+//    exposes bare ocean color for no visible reason, so it's dropped
+//    instead, letting the surrounding country's own color show through.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -107,6 +118,13 @@ const SOVEREIGNTY_OVERRIDES = {
   // leaving it as its own "Kashmir"-attributed sliver only produced a
   // stray triangular border seam at the India/Pakistan/China trijunction.
   'Siachen Glacier': 'India',
+  // Unclaimed by both Egypt and Sudan — a quirk of the two countries citing
+  // different colonial-era boundary treaties, each of which would give this
+  // strip to the *other* country, so both disclaim it instead. There's no
+  // "US-recognized" side here either, but leaving it unresolved just shows
+  // as a hole in the map between two countries that do exist, so it's
+  // folded into Egypt, which has the closer administrative presence.
+  'Bir Tawil': 'Egypt',
 
   // Everything below merges an internal administrative subdivision into its
   // one sovereign country, so the list of selectable countries matches a
@@ -275,7 +293,6 @@ const SOVEREIGNTY_OVERRIDES = {
 // appear in any standard list of countries and territories.
 const UNCLAIMED_OR_DISPUTED_NAMES = [
   'Bajo Nuevo Bank',
-  'Bir Tawil',
   'Brazilian I.',
   'Cyprus U.N. Buffer Zone',
   'Scarborough Reef',
@@ -317,6 +334,56 @@ function dropInsignificantIslets(geoJsonFeature) {
   }
 }
 
+function simpleBounds(ring) {
+  let minLng = Infinity
+  let minLat = Infinity
+  let maxLng = -Infinity
+  let maxLat = -Infinity
+  for (const [lng, lat] of ring) {
+    if (lng < minLng) minLng = lng
+    if (lng > maxLng) maxLng = lng
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+  }
+  return [minLng, minLat, maxLng, maxLat]
+}
+
+const HOLE_MATCH_TOLERANCE_DEG = 0.01
+
+function boundsClose(a, b) {
+  return (
+    Math.abs(a[0] - b[0]) < HOLE_MATCH_TOLERANCE_DEG &&
+    Math.abs(a[1] - b[1]) < HOLE_MATCH_TOLERANCE_DEG &&
+    Math.abs(a[2] - b[2]) < HOLE_MATCH_TOLERANCE_DEG &&
+    Math.abs(a[3] - b[3]) < HOLE_MATCH_TOLERANCE_DEG
+  )
+}
+
+function subPolygonsOf(geometry) {
+  return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
+}
+
+// See part 5 in the header comment above.
+function dropOrphanHoles(features) {
+  const exteriorBounds = features.flatMap((f) => subPolygonsOf(f.geometry).map((rings) => simpleBounds(rings[0])))
+
+  return features.map((f) => {
+    const subPolygons = subPolygonsOf(f.geometry).map((rings) => {
+      if (rings.length === 1) return rings
+      const [exterior, ...holes] = rings
+      const filledHoles = holes.filter((hole) => exteriorBounds.some((b) => boundsClose(b, simpleBounds(hole))))
+      return [exterior, ...filledHoles]
+    })
+    return {
+      ...f,
+      geometry:
+        f.geometry.type === 'Polygon'
+          ? { type: 'Polygon', coordinates: subPolygons[0] }
+          : { type: 'MultiPolygon', coordinates: subPolygons },
+    }
+  })
+}
+
 function simplify(inputFiles, command) {
   return new Promise((resolve, reject) => {
     mapshaper.applyCommands(command, inputFiles, (err, output) => (err ? reject(err) : resolve(output)))
@@ -351,7 +418,7 @@ const simplifiedFeatures = feature(
 ).features
 
 const dropped = simplifiedFeatures.filter((f) => !f.geometry).map((f) => f.properties.NAME)
-const reduced = simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)
+const reduced = dropOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets))
 
 const ringsBefore = simplifiedFeatures.reduce(
   (sum, f) => sum + (f.geometry ? (f.geometry.type === 'Polygon' ? 1 : f.geometry.coordinates.length) : 0),
