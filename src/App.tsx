@@ -4,7 +4,7 @@ import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import Globe, { type GlobeInstance } from 'globe.gl'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
-import { Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshPhongMaterial } from 'three'
+import { BufferAttribute, Color, Group, LineBasicMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshPhongMaterial } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import ConicPolygonGeometry from 'three-conic-polygon-geometry'
 import GeoJsonGeometry from 'three-geojson-geometry'
@@ -15,16 +15,16 @@ interface CountryProperties {
 
 type CountryFeature = Feature<Polygon | MultiPolygon, CountryProperties>
 
+interface VertexRange {
+  start: number
+  count: number
+}
+
 const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
-const LAND_MATERIAL = new MeshBasicMaterial({ color: '#3fae8f' })
+const LAND_COLOR = new Color('#3fae8f')
+const SELECTED_COLOR = new Color('#f2b134')
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
-const SELECTED_MATERIAL = new MeshBasicMaterial({ color: '#f2b134' })
-const SELECTED_BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
-// A hair above the base land layer's own altitude — not a visible "raise",
-// just enough that the highlight's coplanar cap doesn't z-fight with the
-// base layer underneath it.
-const HIGHLIGHT_ALTITUDE = POLYGON_ALTITUDE + 0.00004
 
 function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
@@ -38,68 +38,86 @@ function curvatureResolutionFor(ring: Position[][]): number {
   return areaKm2 < FINE_CURVATURE_AREA_KM2 ? 1 : 5
 }
 
-// Builds one merged land mesh plus one merged border-line object for the
-// given countries, instead of three-globe's default of a separate mesh,
-// material and line object per island ring. With ~350 countries exploding
-// into over a thousand disconnected pieces (every skerry off Norway, every
-// atoll of Indonesia), that default meant thousands of draw calls and
-// thousands of near-identical materials for a map that's visually just two
-// colors — enough to tank frame rate to a fraction of a frame per second.
+// Builds one merged land mesh plus one merged border-line object for all
+// countries, instead of three-globe's default of a separate mesh, material
+// and line object per island ring. With ~350 countries exploding into over a
+// thousand disconnected pieces (every skerry off Norway, every atoll of
+// Indonesia), that default meant thousands of draw calls and thousands of
+// near-identical materials for a map that's visually just two colors —
+// enough to tank frame rate to a fraction of a frame per second.
 //
-// This is also used for the single selected-country highlight, not just the
-// full-world base layer, so both are built through the exact same code path
-// (guaranteeing the highlight's shape exactly matches the base layer's,
-// rather than risking two independent triangulations of the same ring
-// drifting apart from each other).
+// The land mesh carries a per-vertex color attribute (all initialized to
+// LAND_COLOR) instead of a flat material color, and returns the vertex range
+// each country occupies within it. Selecting a country repaints just that
+// range in place — deliberately not a second mesh layered on top: an
+// existing attempt at that (even at a near-zero altitude offset meant only
+// to dodge z-fighting) still z-fought visibly with the base layer, since two
+// separately-triangulated copies of the same coastline are never quite
+// coplanar edge-for-edge.
 //
 // Small islands get a finer curvatureResolution than large landmasses (see
 // FINE_CURVATURE_AREA_KM2 below) — ConicPolygonGeometry's cap triangulation
 // interpolates the ring boundary into a contour at a fixed angular step
 // before triangulating it, so a coarse step is proportionally coarser on a
-// small, high-curvature island than on a landmass the size of France. Known
-// remaining issue: at extreme close zoom (well beyond normal use), a small
-// number of complex coastal stretches can still show a thin sliver of the
-// base layer's color along part of a selected country's edge. Investigated
-// without a confirmed root cause — ruled out the border's altitude offset,
-// this curvatureResolution split, self-intersecting source geometry (fixed
-// separately either way, see build-countries-data.mjs's `-clean` step), and
-// ocean lighting.
-function buildCountryLayer(
+// small, high-curvature island than on a landmass the size of France.
+function buildWorldLayer(
   countries: CountryFeature[],
   radius: number,
-  altitude: number,
-  capMaterial: MeshBasicMaterial,
-  borderMaterial: LineBasicMaterial,
-): Group {
-  const topRadius = radius * (1 + altitude)
+): { group: Group; colorAttribute: BufferAttribute; rangesByName: Map<string, VertexRange> } {
+  const topRadius = radius * (1 + POLYGON_ALTITUDE)
   // Only a hair above the cap — enough to avoid z-fighting, but small enough
   // that at close/oblique zoom the border doesn't visibly part ways from the
   // coastline beneath it (a larger gap here reads as parallax: the border,
   // sitting measurably higher than the land, appears to drift sideways off
   // the actual edge the closer and more obliquely you look at it).
-  const borderRadius = radius * (1 + altitude + 0.00002)
+  const borderRadius = radius * (1 + POLYGON_ALTITUDE + 0.00002)
 
   const capGeometries = []
   const borderGeometries = []
+  const rangesByName = new Map<string, VertexRange>()
+  let vertexCursor = 0
   for (const country of countries) {
+    const start = vertexCursor
     for (const ring of ringsOf(country.geometry)) {
       const res = curvatureResolutionFor(ring)
-      capGeometries.push(new ConicPolygonGeometry(ring, 0, topRadius, false, true, false, res))
+      const cap = new ConicPolygonGeometry(ring, 0, topRadius, false, true, false, res)
+      vertexCursor += cap.attributes.position.count
+      capGeometries.push(cap)
       borderGeometries.push(new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, borderRadius, res))
     }
+    rangesByName.set(country.properties.NAME, { start, count: vertexCursor - start })
   }
 
+  const capGeometry = mergeGeometries(capGeometries, false)
+  const colors = new Float32Array(capGeometry.attributes.position.count * 3)
+  const colorAttribute = new BufferAttribute(colors, 3)
+  for (let i = 0; i < colorAttribute.count; i++) {
+    colorAttribute.setXYZ(i, LAND_COLOR.r, LAND_COLOR.g, LAND_COLOR.b)
+  }
+  capGeometry.setAttribute('color', colorAttribute)
+
   const group = new Group()
-  group.add(new Mesh(mergeGeometries(capGeometries, false), capMaterial))
-  group.add(new LineSegments(mergeGeometries(borderGeometries, false), borderMaterial))
-  return group
+  group.add(new Mesh(capGeometry, new MeshBasicMaterial({ vertexColors: true })))
+  group.add(new LineSegments(mergeGeometries(borderGeometries, false), BORDER_MATERIAL))
+  return { group, colorAttribute, rangesByName }
+}
+
+function paintRange(colorAttribute: BufferAttribute, range: VertexRange | undefined, color: Color): void {
+  if (!range) return
+  for (let v = range.start; v < range.start + range.count; v++) {
+    colorAttribute.setXYZ(v, color.r, color.g, color.b)
+  }
+  colorAttribute.needsUpdate = true
 }
 
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<GlobeInstance | null>(null)
   const worldGroupRef = useRef<Group | null>(null)
-  const highlightRef = useRef<Group | null>(null)
+  const worldLayerRef = useRef<{ colorAttribute: BufferAttribute; rangesByName: Map<string, VertexRange> } | null>(
+    null,
+  )
+  const selectedRangeRef = useRef<VertexRange | undefined>(undefined)
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const [selectedName, setSelectedName] = useState('')
 
@@ -154,8 +172,9 @@ function App() {
     const worldGroup = worldGroupRef.current
     if (!globe || !worldGroup || countries.length === 0) return
 
-    const baseLayer = buildCountryLayer(countries, globe.getGlobeRadius(), POLYGON_ALTITUDE, LAND_MATERIAL, BORDER_MATERIAL)
-    worldGroup.add(baseLayer)
+    const { group, colorAttribute, rangesByName } = buildWorldLayer(countries, globe.getGlobeRadius())
+    worldGroup.add(group)
+    worldLayerRef.current = { colorAttribute, rangesByName }
   }, [countries])
 
   const countryByName = useMemo(
@@ -168,28 +187,15 @@ function App() {
   )
 
   useEffect(() => {
-    const globe = globeRef.current
-    const worldGroup = worldGroupRef.current
-    if (!globe || !worldGroup) return
+    const worldLayer = worldLayerRef.current
+    if (!worldLayer) return
+    const { colorAttribute, rangesByName } = worldLayer
 
-    if (highlightRef.current) {
-      worldGroup.remove(highlightRef.current)
-      highlightRef.current = null
-    }
-
-    const country = countryByName.get(selectedName)
-    if (!country) return
-
-    const highlight = buildCountryLayer(
-      [country],
-      globe.getGlobeRadius(),
-      HIGHLIGHT_ALTITUDE,
-      SELECTED_MATERIAL,
-      SELECTED_BORDER_MATERIAL,
-    )
-    worldGroup.add(highlight)
-    highlightRef.current = highlight
-  }, [selectedName, countryByName])
+    paintRange(colorAttribute, selectedRangeRef.current, LAND_COLOR)
+    const nextRange = rangesByName.get(selectedName)
+    paintRange(colorAttribute, nextRange, SELECTED_COLOR)
+    selectedRangeRef.current = nextRange
+  }, [selectedName, countries])
 
   const flyToCountry = (name: string) => {
     setSelectedName(name)
