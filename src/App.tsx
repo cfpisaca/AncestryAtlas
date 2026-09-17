@@ -158,7 +158,14 @@ function App() {
     const worldGroup = new Group()
     worldGroupRef.current = worldGroup
 
-    const globe = new Globe(container)
+    // WebGL's default depth buffer spends most of its precision close to the
+    // camera, so the ~38km gap between land's cap and the ocean sphere below
+    // it (POLYGON_ALTITUDE) becomes unresolvable at long camera distances —
+    // the two surfaces flicker against each other, worse zoomed out than in,
+    // and worse on mobile GPUs (often a 16-bit depth buffer vs. 24-bit on
+    // desktop). A logarithmic depth buffer fixes the precision distribution
+    // itself instead of trying to widen the gap further.
+    const globe = new Globe(container, { rendererConfig: { logarithmicDepthBuffer: true } })
       .width(container.clientWidth)
       .height(container.clientHeight)
       .globeMaterial(OCEAN_MATERIAL)
