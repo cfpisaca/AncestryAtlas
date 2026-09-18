@@ -8,7 +8,8 @@ import { BufferAttribute, Color, Group, LineBasicMaterial, LineSegments, Mesh, M
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import ConicPolygonGeometry from 'three-conic-polygon-geometry'
 import GeoJsonGeometry from 'three-geojson-geometry'
-import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT } from './continents'
+import { CONTINENT_BY_COUNTRY } from './continents'
+import CountryPicker from './CountryPicker'
 
 interface CountryProperties {
   NAME: string
@@ -257,38 +258,11 @@ function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      <select
-        value={selectedName}
-        onChange={(event) => flyToCountry(event.target.value)}
-        style={{
-          position: 'absolute',
-          top: 16,
-          left: 16,
-          zIndex: 1,
-          padding: '8px 10px',
-          borderRadius: 8,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          background: 'rgba(10, 19, 18, 0.85)',
-          color: '#e3ece9',
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: 14,
-        }}
-      >
-        <option value="">All countries</option>
-        {CONTINENT_ORDER.map((continent) => {
-          const names = countryNamesByContinent.get(continent)
-          if (!names) return null
-          return (
-            <optgroup key={continent} label={continent}>
-              {names.map((name) => (
-                <option key={name} value={name}>
-                  {TERRITORY_PARENT[name] ? `${name} (${TERRITORY_PARENT[name]})` : name}
-                </option>
-              ))}
-            </optgroup>
-          )
-        })}
-      </select>
+      <CountryPicker
+        countryNamesByContinent={countryNamesByContinent}
+        selectedName={selectedName}
+        onSelect={flyToCountry}
+      />
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   )
