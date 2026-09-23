@@ -124,6 +124,14 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     null,
   )
   const [countries, setCountries] = useState<CountryFeature[]>([])
+  // Tracks the land mesh itself, not just the fetch: buildWorldLayer merges
+  // geometry for ~250 countries synchronously and can take noticeably
+  // longer than the fetch, so isLoading below stays true through that work
+  // too — otherwise the loading overlay disappears the instant the JSON
+  // arrives, and whoever's looking at it sees the loading text vanish, then
+  // a bare ocean sphere for however long the merge takes, before land pops
+  // in — reading as broken rather than still loading.
+  const [worldReady, setWorldReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retryToken, setRetryToken] = useState(0)
   // Read via ref inside the mount effect below (deps []) rather than as a
@@ -160,6 +168,8 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
 
   const retry = useCallback(() => {
     setLoadError(null)
+    setWorldReady(false)
+    setCountries([])
     setRetryToken((t) => t + 1)
   }, [])
 
@@ -222,6 +232,14 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
       const { group, colorAttribute, rangesByName } = buildWorldLayer(countries, globe.getGlobeRadius())
       worldGroup.add(group)
       worldLayerRef.current = { colorAttribute, rangesByName }
+      setWorldReady(true)
+      // Only relevant on retry (a second successful fetch after a first
+      // failure): removes the previous mesh instead of leaving it layered
+      // underneath a newly-built one.
+      return () => {
+        worldGroup.remove(group)
+        worldLayerRef.current = null
+      }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to render world data')
     }
@@ -233,7 +251,7 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     paintRange(layer.colorAttribute, layer.rangesByName.get(name), color)
   }, [])
 
-  const isLoading = countries.length === 0 && !loadError
+  const isLoading = !worldReady && !loadError
 
   return { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry }
 }
