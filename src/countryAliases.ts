@@ -63,10 +63,14 @@ function normalize(value: string): string {
 
 // Maps every normalized guessable name and known alias to its canonical
 // name, so matching user input is a single lookup rather than a scan.
-export function buildGuessLookup(guessableNames: string[]): Map<string, string> {
+// extraAliases works the same as COUNTRY_ALIASES (only wired up if its
+// canonical is actually guessable) — callers use it for aliases that only
+// make sense for their own guessable list, like a quiz that wants territory
+// names to resolve to their parent country.
+export function buildGuessLookup(guessableNames: string[], extraAliases: Record<string, string> = {}): Map<string, string> {
   const lookup = new Map<string, string>()
   for (const name of guessableNames) lookup.set(normalize(name), name)
-  for (const [alias, canonical] of Object.entries(COUNTRY_ALIASES)) {
+  for (const [alias, canonical] of [...Object.entries(COUNTRY_ALIASES), ...Object.entries(extraAliases)]) {
     if (guessableNames.includes(canonical)) lookup.set(normalize(alias), canonical)
   }
   return lookup

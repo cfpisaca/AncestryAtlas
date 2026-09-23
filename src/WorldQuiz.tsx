@@ -12,29 +12,33 @@ const MISSED_COLOR = new Color('#ef4444')
 const MISSING_POINT_COLOR = '#fbbf24'
 const GAME_DURATION_SECONDS = 15 * 60
 
-// Quiz-only grouping, one step wider than the shared Continent type: this
-// quiz also asks about dependent territories (grouped under their parent's
-// continent, same as CONTINENT_BY_COUNTRY already does) and, just for fun,
-// Antarctica — which CONTINENT_BY_COUNTRY deliberately leaves out since
-// it's not a country and the explorer's picker has no use grouping it.
-type QuizContinent = Continent | 'Antarctica'
-const QUIZ_CONTINENT_ORDER: readonly QuizContinent[] = [...CONTINENT_ORDER, 'Antarctica']
-
-function continentForName(name: string): QuizContinent | undefined {
-  return name === 'Antarctica' ? 'Antarctica' : CONTINENT_BY_COUNTRY[name]
+// TERRITORY_PARENT's values are short display labels ('US', 'UK'), not
+// necessarily the exact guessable NAME string — everything except those two
+// already matches (e.g. 'France', 'Netherlands' are spelled the same both
+// places), so only the mismatches need mapping.
+const PARENT_LABEL_TO_COUNTRY: Record<string, string> = {
+  US: 'United States of America',
+  UK: 'United Kingdom',
 }
+
+// Lets guessing a dependent territory (Puerto Rico, Bermuda, etc.) count as
+// guessing its parent country instead of being its own separate entry —
+// territories aren't sovereign countries, but knowing "Puerto Rico is part
+// of the US" is still a fair way to get the US.
+const TERRITORY_GUESS_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(TERRITORY_PARENT).map(([territory, label]) => [territory, PARENT_LABEL_TO_COUNTRY[label] ?? label]),
+)
 
 // Matches each continent to its own color, both for the guessed-country
 // panels and the remaining-count badges, so they're distinguishable at a
 // glance rather than all reading as one undifferentiated green list.
-const CONTINENT_COLOR: Record<QuizContinent, string> = {
+const CONTINENT_COLOR: Record<Continent, string> = {
   Africa: '#c084fc',
   Asia: '#f87171',
   Europe: '#60a5fa',
   'North America': '#fb923c',
   Oceania: '#22d3ee',
   'South America': '#4ade80',
-  Antarctica: '#e2e8f0',
 }
 
 function formatTime(totalSeconds: number): string {
@@ -53,15 +57,18 @@ const panelStyle: CSSProperties = {
 function WorldQuiz() {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
 
-  // Everything the globe renders as a place is guessable here: sovereign
-  // countries, dependent territories (Puerto Rico, Bermuda, etc. — grouped
-  // under their parent's continent same as CONTINENT_BY_COUNTRY already
-  // does), and Antarctica, folded in as its own continent-of-one.
+  // Sovereign countries only, matching the ~196 commonly cited world total —
+  // dependent territories aren't separately guessable (see
+  // TERRITORY_GUESS_ALIASES above: guessing one counts for its parent
+  // instead), and Antarctica isn't a country.
   const guessableNames = useMemo(
-    () => countries.map((c) => c.properties.NAME).filter((name) => continentForName(name) !== undefined),
+    () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
     [countries],
   )
-  const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
+  const guessLookup = useMemo(
+    () => buildGuessLookup(guessableNames, TERRITORY_GUESS_ALIASES),
+    [guessableNames],
+  )
   const centroidByName = useMemo(() => {
     const map = new Map<string, [number, number]>()
     for (const country of countries) map.set(country.properties.NAME, geoCentroid(country))
@@ -155,12 +162,11 @@ function WorldQuiz() {
   // sorted alphabetically — guessed ones stay green, the rest turn red —
   // matching how these quizzes conventionally reveal the full answer key.
   const displayByContinent = useMemo(() => {
-    const groups = new Map<QuizContinent, { name: string; isGuessed: boolean }[]>()
+    const groups = new Map<Continent, { name: string; isGuessed: boolean }[]>()
     for (const name of guessableNames) {
       const isGuessed = guessed.has(name)
       if (!isGameOver && !isGuessed) continue
-      const continent = continentForName(name)
-      if (!continent) continue
+      const continent = CONTINENT_BY_COUNTRY[name]
       const list = groups.get(continent) ?? []
       list.push({ name, isGuessed })
       groups.set(continent, list)
@@ -175,10 +181,9 @@ function WorldQuiz() {
   // you've guessed anything there yet — unlike displayByContinent above,
   // which only lists continents you've already started.
   const continentProgress = useMemo(() => {
-    const totals = new Map<QuizContinent, { total: number; guessedCount: number }>()
+    const totals = new Map<Continent, { total: number; guessedCount: number }>()
     for (const name of guessableNames) {
-      const continent = continentForName(name)
-      if (!continent) continue
+      const continent = CONTINENT_BY_COUNTRY[name]
       const entry = totals.get(continent) ?? { total: 0, guessedCount: 0 }
       entry.total += 1
       if (guessed.has(name)) entry.guessedCount += 1
@@ -328,7 +333,7 @@ function WorldQuiz() {
           </div>
 
           <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)' }}>
-            {QUIZ_CONTINENT_ORDER.map((continent) => {
+            {CONTINENT_ORDER.map((continent) => {
               const entries = displayByContinent.get(continent) ?? []
               const progress = continentProgress.get(continent)
               return (
@@ -348,9 +353,6 @@ function WorldQuiz() {
                   {entries.map(({ name, isGuessed }) => (
                     <div key={name} style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>
                       {name}
-                      {name in TERRITORY_PARENT && (
-                        <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}> ({TERRITORY_PARENT[name]})</span>
-                      )}
                     </div>
                   ))}
                 </div>
