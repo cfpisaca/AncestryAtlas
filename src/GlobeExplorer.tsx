@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { CONTINENT_BY_COUNTRY } from './continents'
 import CountryPicker from './CountryPicker'
+import GlobeStatus from './GlobeStatus'
 import { LAND_COLOR, useWorldGlobe, type CountryFeature } from './useWorldGlobe'
 
 const SELECTED_COLOR = new Color('#f2b134')
@@ -28,7 +29,7 @@ function altitudeForCountry(country: CountryFeature): number {
 }
 
 function GlobeExplorer() {
-  const { containerRef, globeRef, countries, paintCountry } = useWorldGlobe()
+  const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe()
   const [selectedName, setSelectedName] = useState('')
   const previousSelectedRef = useRef('')
 
@@ -104,6 +105,7 @@ function GlobeExplorer() {
       >
         Play World Quiz
       </Link>
+      <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   )

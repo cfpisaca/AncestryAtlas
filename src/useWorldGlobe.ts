@@ -124,20 +124,43 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     null,
   )
   const [countries, setCountries] = useState<CountryFeature[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
   // Read via ref inside the mount effect below (deps []) rather than as a
   // direct dependency: it's a one-time initial value for the globe, not
   // something that should tear down and rebuild the globe if a caller's
   // prop happens to change on a later render.
   const initialAutoRotateRef = useRef(autoRotate)
 
+  // Without a .catch() here, a failed or dropped fetch (slow connection,
+  // GitHub Pages hiccup) left the globe an unexplained blank dark sphere
+  // forever — no error, no loading indication, indistinguishable from
+  // "still loading" to whoever's looking at it.
   useEffect(() => {
+    let cancelled = false
     fetch(`${import.meta.env.BASE_URL}data/countries.json`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load world data (HTTP ${res.status})`)
+        return res.json()
+      })
       .then((topology: Topology) => {
+        if (cancelled) return
         const collection = feature(topology, topology.objects.countries as GeometryCollection)
         const withGeometry = collection.features.filter((f) => f.geometry) as CountryFeature[]
         setCountries(withGeometry)
       })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setLoadError(err instanceof Error ? err.message : 'Failed to load world data')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [retryToken])
+
+  const retry = useCallback(() => {
+    setLoadError(null)
+    setRetryToken((t) => t + 1)
   }, [])
 
   useEffect(() => {
@@ -199,5 +222,7 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     paintRange(layer.colorAttribute, layer.rangesByName.get(name), color)
   }, [])
 
-  return { containerRef, globeRef, countries, paintCountry }
+  const isLoading = countries.length === 0 && !loadError
+
+  return { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry }
 }

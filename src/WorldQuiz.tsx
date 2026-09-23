@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
+import GlobeStatus from './GlobeStatus'
 import { LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const GUESSED_COLOR = new Color('#4ade80')
@@ -38,7 +39,7 @@ const panelStyle: CSSProperties = {
 }
 
 function WorldQuiz() {
-  const { containerRef, globeRef, countries, paintCountry } = useWorldGlobe({ autoRotate: false })
+  const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
   // dependent territories (Puerto Rico, Bermuda, etc., see TERRITORY_PARENT)
@@ -212,6 +213,7 @@ function WorldQuiz() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', fontFamily: 'system-ui, sans-serif' }}>
+      <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
       {!hasStarted ? (
         <button
           type="button"
