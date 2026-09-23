@@ -18,7 +18,7 @@ function formatTime(totalSeconds: number): string {
 }
 
 function WorldQuiz() {
-  const { containerRef, globeRef, countries, paintCountry } = useWorldGlobe()
+  const { containerRef, globeRef, countries, paintCountry } = useWorldGlobe({ autoRotate: false })
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
   // dependent territories (Puerto Rico, Bermuda, etc., see TERRITORY_PARENT)

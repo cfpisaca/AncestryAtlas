@@ -116,7 +116,7 @@ function paintRange(colorAttribute: BufferAttribute, range: VertexRange | undefi
 // merged world mesh, and exposes paintCountry so each mode can recolor
 // countries however its own game logic needs without knowing anything about
 // the underlying mesh/vertex-range plumbing.
-export function useWorldGlobe() {
+export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<GlobeInstance | null>(null)
   const worldGroupRef = useRef<Group | null>(null)
@@ -124,6 +124,11 @@ export function useWorldGlobe() {
     null,
   )
   const [countries, setCountries] = useState<CountryFeature[]>([])
+  // Read via ref inside the mount effect below (deps []) rather than as a
+  // direct dependency: it's a one-time initial value for the globe, not
+  // something that should tear down and rebuild the globe if a caller's
+  // prop happens to change on a later render.
+  const initialAutoRotateRef = useRef(autoRotate)
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/countries.json`)
@@ -161,7 +166,7 @@ export function useWorldGlobe() {
       .customThreeObject(() => worldGroup)
 
     globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 })
-    globe.controls().autoRotate = true
+    globe.controls().autoRotate = initialAutoRotateRef.current
     globe.controls().autoRotateSpeed = 0.4
 
     globeRef.current = globe
