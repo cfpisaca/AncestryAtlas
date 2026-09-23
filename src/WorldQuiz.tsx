@@ -21,13 +21,17 @@ const PARENT_LABEL_TO_COUNTRY: Record<string, string> = {
   UK: 'United Kingdom',
 }
 
-// Lets guessing a dependent territory (Puerto Rico, Bermuda, etc.) count as
-// guessing its parent country instead of being its own separate entry —
-// territories aren't sovereign countries, but knowing "Puerto Rico is part
-// of the US" is still a fair way to get the US.
-const TERRITORY_GUESS_ALIASES: Record<string, string> = Object.fromEntries(
-  Object.entries(TERRITORY_PARENT).map(([territory, label]) => [territory, PARENT_LABEL_TO_COUNTRY[label] ?? label]),
-)
+// The inverse of TERRITORY_PARENT: guessing a sovereign country marks its
+// territories (Puerto Rico, Guam, etc.) as complete alongside it — they're
+// not separately guessable, they just ride along with their parent.
+const TERRITORIES_BY_COUNTRY: Record<string, string[]> = {}
+for (const [territory, label] of Object.entries(TERRITORY_PARENT)) {
+  const parent = PARENT_LABEL_TO_COUNTRY[label] ?? label
+  const list = TERRITORIES_BY_COUNTRY[parent] ?? []
+  list.push(territory)
+  TERRITORIES_BY_COUNTRY[parent] = list
+}
+for (const list of Object.values(TERRITORIES_BY_COUNTRY)) list.sort((a, b) => a.localeCompare(b))
 
 // Matches each continent to its own color, both for the guessed-country
 // panels and the remaining-count badges, so they're distinguishable at a
@@ -59,16 +63,13 @@ function WorldQuiz() {
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
   // dependent territories aren't separately guessable (see
-  // TERRITORY_GUESS_ALIASES above: guessing one counts for its parent
+  // TERRITORIES_BY_COUNTRY above: guessing the parent completes them
   // instead), and Antarctica isn't a country.
   const guessableNames = useMemo(
     () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
     [countries],
   )
-  const guessLookup = useMemo(
-    () => buildGuessLookup(guessableNames, TERRITORY_GUESS_ALIASES),
-    [guessableNames],
-  )
+  const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
   const centroidByName = useMemo(() => {
     const map = new Map<string, [number, number]>()
     for (const country of countries) map.set(country.properties.NAME, geoCentroid(country))
@@ -161,14 +162,18 @@ function WorldQuiz() {
   // list reads as a running tally). At game over, every country appears,
   // sorted alphabetically — guessed ones stay green, the rest turn red —
   // matching how these quizzes conventionally reveal the full answer key.
+  // Each entry carries its territories along with it: they only appear once
+  // their parent does, already colored the same as the parent, so a
+  // territory "fills in" at the exact moment its country is guessed rather
+  // than sitting there blank beforehand.
   const displayByContinent = useMemo(() => {
-    const groups = new Map<Continent, { name: string; isGuessed: boolean }[]>()
+    const groups = new Map<Continent, { name: string; isGuessed: boolean; territories: string[] }[]>()
     for (const name of guessableNames) {
       const isGuessed = guessed.has(name)
       if (!isGameOver && !isGuessed) continue
       const continent = CONTINENT_BY_COUNTRY[name]
       const list = groups.get(continent) ?? []
-      list.push({ name, isGuessed })
+      list.push({ name, isGuessed, territories: TERRITORIES_BY_COUNTRY[name] ?? [] })
       groups.set(continent, list)
     }
     if (isGameOver) {
@@ -350,9 +355,21 @@ function WorldQuiz() {
                   >
                     {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
                   </div>
-                  {entries.map(({ name, isGuessed }) => (
-                    <div key={name} style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>
-                      {name}
+                  {entries.map(({ name, isGuessed, territories }) => (
+                    <div key={name}>
+                      <div style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
+                      {territories.map((territory) => (
+                        <div
+                          key={territory}
+                          style={{
+                            padding: '2px 10px 2px 20px',
+                            fontSize: 11,
+                            color: isGuessed ? 'rgba(74, 222, 128, 0.75)' : 'rgba(239, 68, 68, 0.75)',
+                          }}
+                        >
+                          {territory}
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
