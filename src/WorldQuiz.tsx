@@ -111,6 +111,23 @@ function WorldQuiz() {
   // country's centroid (matching how these quizzes conventionally offer a
   // "where" hint without giving away the name or shape), toggleable at any
   // time without pausing or ending the game.
+  //
+  // This array is built once and never rebuilt while toggled on — only the
+  // per-point radius/color accessors change as you guess. Rebuilding the
+  // array itself (even with the guessed entry filtered out) makes
+  // three-globe's data-join see "all new data" each time and replay the
+  // enter animation for every remaining point, not just remove the one you
+  // got — reads as the whole hint layer flickering/refreshing on every
+  // correct guess instead of one dot quietly disappearing.
+  const missingPoints = useMemo(() => {
+    return guessableNames
+      .map((name) => {
+        const centroid = centroidByName.get(name)
+        return centroid ? { name, lat: centroid[1], lng: centroid[0] } : null
+      })
+      .filter((point): point is { name: string; lat: number; lng: number } => point !== null)
+  }, [guessableNames, centroidByName])
+
   useEffect(() => {
     const globe = globeRef.current
     if (!globe) return
@@ -118,19 +135,15 @@ function WorldQuiz() {
       globe.pointsData([])
       return
     }
-    const points = guessableNames
-      .filter((name) => !guessed.has(name))
-      .map((name) => centroidByName.get(name))
-      .filter((centroid): centroid is [number, number] => centroid !== undefined)
-      .map(([lng, lat]) => ({ lat, lng }))
-    globe
-      .pointsData(points)
-      .pointLat('lat')
-      .pointLng('lng')
-      .pointColor(() => MISSING_POINT_COLOR)
-      .pointRadius(0.3)
-      .pointAltitude(0.01)
-  }, [showMissing, guessed, guessableNames, centroidByName, globeRef])
+    globe.pointsData(missingPoints).pointLat('lat').pointLng('lng').pointAltitude(0.01)
+  }, [showMissing, missingPoints, globeRef])
+
+  useEffect(() => {
+    const globe = globeRef.current
+    if (!globe || !showMissing) return
+    const isGuessedPoint = (d: object) => guessed.has((d as { name: string }).name)
+    globe.pointColor((d) => (isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR)).pointRadius((d) => (isGuessedPoint(d) ? 0 : 0.3))
+  }, [guessed, showMissing, globeRef])
 
   useEffect(() => {
     if (!isGameOver) return
@@ -345,33 +358,10 @@ function WorldQuiz() {
               </Link>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)' }}>
               {CONTINENT_ORDER.map((continent) => {
+                const entries = displayByContinent.get(continent) ?? []
                 const progress = continentProgress.get(continent)
-                if (!progress) return null
-                return (
-                  <div
-                    key={continent}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 6,
-                      background: CONTINENT_COLOR[continent],
-                      color: '#0a1312',
-                      fontWeight: 700,
-                      fontSize: 12,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {continent} {progress.guessedCount}/{progress.total}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 220px)' }}>
-              {CONTINENT_ORDER.map((continent) => {
-                const entries = displayByContinent.get(continent)
-                if (!entries || entries.length === 0) return null
                 return (
                   <div key={continent} style={{ ...panelStyle, width: 160, maxHeight: '100%', overflowY: 'auto' }}>
                     <div
@@ -384,7 +374,7 @@ function WorldQuiz() {
                         top: 0,
                       }}
                     >
-                      {continent}
+                      {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
                     </div>
                     {entries.map(({ name, isGuessed }) => (
                       <div key={name} style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>
