@@ -11,36 +11,30 @@ const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
 const MISSING_POINT_COLOR = '#fbbf24'
 const GAME_DURATION_SECONDS = 15 * 60
-const VIEW_POLL_INTERVAL_MS = 400
 
-// "Viewing: X" covers the whole sphere, oceans included, so it needs one
-// more zone than the guessable continents: Antarctica isn't a country and
-// has no guessable countries of its own, but it's still real estate on the
-// globe worth naming when the camera's pointed at it.
-type ViewingRegion = Continent | 'Antarctica'
+// Quiz-only grouping, one step wider than the shared Continent type: this
+// quiz also asks about dependent territories (grouped under their parent's
+// continent, same as CONTINENT_BY_COUNTRY already does) and, just for fun,
+// Antarctica — which CONTINENT_BY_COUNTRY deliberately leaves out since
+// it's not a country and the explorer's picker has no use grouping it.
+type QuizContinent = Continent | 'Antarctica'
+const QUIZ_CONTINENT_ORDER: readonly QuizContinent[] = [...CONTINENT_ORDER, 'Antarctica']
+
+function continentForName(name: string): QuizContinent | undefined {
+  return name === 'Antarctica' ? 'Antarctica' : CONTINENT_BY_COUNTRY[name]
+}
 
 // Matches each continent to its own color, both for the guessed-country
 // panels and the remaining-count badges, so they're distinguishable at a
 // glance rather than all reading as one undifferentiated green list.
-const CONTINENT_COLOR: Record<Continent, string> = {
+const CONTINENT_COLOR: Record<QuizContinent, string> = {
   Africa: '#c084fc',
   Asia: '#f87171',
   Europe: '#60a5fa',
   'North America': '#fb923c',
   Oceania: '#22d3ee',
   'South America': '#4ade80',
-}
-const VIEWING_COLOR: Record<ViewingRegion, string> = { ...CONTINENT_COLOR, Antarctica: '#e2e8f0' }
-
-// Converts a lng/lat pair to a unit vector on the sphere, so "nearest zone"
-// can be answered with a dot product instead of point-in-polygon testing —
-// the only way to give every ocean point a zone too, not just points that
-// happen to land inside a country's coastline.
-function toUnitVector(lng: number, lat: number): [number, number, number] {
-  const lambda = (lng * Math.PI) / 180
-  const phi = (lat * Math.PI) / 180
-  const cosPhi = Math.cos(phi)
-  return [cosPhi * Math.cos(lambda), cosPhi * Math.sin(lambda), Math.sin(phi)]
+  Antarctica: '#e2e8f0',
 }
 
 function formatTime(totalSeconds: number): string {
@@ -59,11 +53,12 @@ const panelStyle: CSSProperties = {
 function WorldQuiz() {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
 
-  // Sovereign countries only, matching the ~196 commonly cited world total —
-  // dependent territories (Puerto Rico, Bermuda, etc., see TERRITORY_PARENT)
-  // aren't quizzed as their own countries, and Antarctica isn't a country.
+  // Everything the globe renders as a place is guessable here: sovereign
+  // countries, dependent territories (Puerto Rico, Bermuda, etc. — grouped
+  // under their parent's continent same as CONTINENT_BY_COUNTRY already
+  // does), and Antarctica, folded in as its own continent-of-one.
   const guessableNames = useMemo(
-    () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
+    () => countries.map((c) => c.properties.NAME).filter((name) => continentForName(name) !== undefined),
     [countries],
   )
   const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
@@ -73,23 +68,6 @@ function WorldQuiz() {
     return map
   }, [countries])
 
-  // Everything the globe actually renders that the quiz doesn't ask about:
-  // dependent territories (shown with their parent, same as the explorer's
-  // dropdown) plus Antarctica, which isn't a country at all.
-  const territoryNames = useMemo(() => countries.map((c) => c.properties.NAME).filter((name) => name in TERRITORY_PARENT), [countries])
-  const hasAntarctica = useMemo(() => countries.some((c) => c.properties.NAME === 'Antarctica'), [countries])
-  const territoriesByContinent = useMemo(() => {
-    const groups = new Map<Continent, string[]>()
-    for (const name of territoryNames) {
-      const continent = CONTINENT_BY_COUNTRY[name]
-      const list = groups.get(continent) ?? []
-      list.push(name)
-      groups.set(continent, list)
-    }
-    for (const list of groups.values()) list.sort((a, b) => a.localeCompare(b))
-    return groups
-  }, [territoryNames])
-
   const [hasStarted, setHasStarted] = useState(false)
   const [guessed, setGuessed] = useState<Set<string>>(new Set())
   const [input, setInput] = useState('')
@@ -97,8 +75,6 @@ function WorldQuiz() {
   const [isPaused, setIsPaused] = useState(false)
   const [hasGivenUp, setHasGivenUp] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
-  const [showTerritories, setShowTerritories] = useState(false)
-  const [viewingContinent, setViewingContinent] = useState<ViewingRegion | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -107,60 +83,6 @@ function WorldQuiz() {
     const timeout = setTimeout(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000)
     return () => clearTimeout(timeout)
   }, [hasStarted, secondsLeft, isPaused, isGameOver])
-
-  // One anchor point per zone (each continent's countries averaged into a
-  // single point on the sphere, plus Antarctica's own centroid), used below
-  // to partition the entire globe — oceans included — into the nearest
-  // zone by angular distance, rather than only naming a zone when the
-  // camera happens to be over land.
-  const viewingAnchors = useMemo(() => {
-    const sums = new Map<ViewingRegion, [number, number, number]>()
-    for (const name of guessableNames) {
-      const centroid = centroidByName.get(name)
-      if (!centroid) continue
-      const continent = CONTINENT_BY_COUNTRY[name]
-      const vec = toUnitVector(centroid[0], centroid[1])
-      const sum = sums.get(continent) ?? [0, 0, 0]
-      sums.set(continent, [sum[0] + vec[0], sum[1] + vec[1], sum[2] + vec[2]])
-    }
-    const antarctica = countries.find((c) => c.properties.NAME === 'Antarctica')
-    if (antarctica) {
-      const [lng, lat] = geoCentroid(antarctica)
-      sums.set('Antarctica', toUnitVector(lng, lat))
-    }
-    const anchors = new Map<ViewingRegion, [number, number, number]>()
-    for (const [region, [x, y, z]] of sums) {
-      const length = Math.hypot(x, y, z) || 1
-      anchors.set(region, [x / length, y / length, z / length])
-    }
-    return anchors
-  }, [guessableNames, centroidByName, countries])
-
-  // globe.gl has no "camera changed" event, so this polls pointOfView()
-  // instead — cheap relative to the poll interval, same as checking 7
-  // dot products every tick. Whichever zone anchor is angularly closest to
-  // the current look-at point determines what's showing as "currently
-  // viewing", covering ocean the same as land.
-  useEffect(() => {
-    if (!hasStarted || viewingAnchors.size === 0) return
-    const interval = setInterval(() => {
-      const globe = globeRef.current
-      if (!globe) return
-      const { lat, lng } = globe.pointOfView()
-      const point = toUnitVector(lng, lat)
-      let closest: ViewingRegion | null = null
-      let bestDot = -Infinity
-      for (const [region, anchor] of viewingAnchors) {
-        const dot = point[0] * anchor[0] + point[1] * anchor[1] + point[2] * anchor[2]
-        if (dot > bestDot) {
-          bestDot = dot
-          closest = region
-        }
-      }
-      setViewingContinent(closest)
-    }, VIEW_POLL_INTERVAL_MS)
-    return () => clearInterval(interval)
-  }, [hasStarted, viewingAnchors, globeRef])
 
   // A location hint, not an answer reveal: small dots at each unguessed
   // country's centroid (matching how these quizzes conventionally offer a
@@ -233,11 +155,12 @@ function WorldQuiz() {
   // sorted alphabetically — guessed ones stay green, the rest turn red —
   // matching how these quizzes conventionally reveal the full answer key.
   const displayByContinent = useMemo(() => {
-    const groups = new Map<Continent, { name: string; isGuessed: boolean }[]>()
+    const groups = new Map<QuizContinent, { name: string; isGuessed: boolean }[]>()
     for (const name of guessableNames) {
       const isGuessed = guessed.has(name)
       if (!isGameOver && !isGuessed) continue
-      const continent = CONTINENT_BY_COUNTRY[name]
+      const continent = continentForName(name)
+      if (!continent) continue
       const list = groups.get(continent) ?? []
       list.push({ name, isGuessed })
       groups.set(continent, list)
@@ -252,9 +175,10 @@ function WorldQuiz() {
   // you've guessed anything there yet — unlike displayByContinent above,
   // which only lists continents you've already started.
   const continentProgress = useMemo(() => {
-    const totals = new Map<Continent, { total: number; guessedCount: number }>()
+    const totals = new Map<QuizContinent, { total: number; guessedCount: number }>()
     for (const name of guessableNames) {
-      const continent = CONTINENT_BY_COUNTRY[name]
+      const continent = continentForName(name)
+      if (!continent) continue
       const entry = totals.get(continent) ?? { total: 0, guessedCount: 0 }
       entry.total += 1
       if (guessed.has(name)) entry.guessedCount += 1
@@ -293,207 +217,147 @@ function WorldQuiz() {
           Start Quiz ▶
         </button>
       ) : (
-        <>
+        <div
+          style={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            maxWidth: 'calc(100vw - 32px)',
+          }}
+        >
           <div
             style={{
-              position: 'absolute',
-              top: 16,
-              left: 16,
-              zIndex: 1,
               display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              maxWidth: 'calc(100vw - 32px)',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              background: 'rgba(10, 19, 18, 0.9)',
+              color: '#e3ece9',
+              fontSize: 14,
+              flexWrap: 'wrap',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                background: 'rgba(10, 19, 18, 0.9)',
-                color: '#e3ece9',
-                fontSize: 14,
-                flexWrap: 'wrap',
-              }}
-            >
-              <span style={{ fontSize: 20, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80', minWidth: 48 }}>
-                {formatTime(secondsLeft)}
-              </span>
-              {!isGameOver && (
-                <button
-                  type="button"
-                  onClick={() => setIsPaused((p) => !p)}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: 6,
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    color: '#e3ece9',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {isPaused ? 'Resume' : 'Pause'}
-                </button>
-              )}
+            <span style={{ fontSize: 20, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80', minWidth: 48 }}>
+              {formatTime(secondsLeft)}
+            </span>
+            {!isGameOver && (
               <button
                 type="button"
-                onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
+                onClick={() => setIsPaused((p) => !p)}
                 style={{
                   padding: '6px 10px',
                   borderRadius: 6,
-                  border: 'none',
-                  background: '#ef4444',
-                  color: '#fff',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#e3ece9',
                   cursor: 'pointer',
                 }}
               >
-                {isGameOver ? 'Play Again' : 'Give Up?'}
+                {isPaused ? 'Resume' : 'Pause'}
               </button>
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(event) => handleInputChange(event.target.value)}
-                disabled={isInputDisabled}
-                placeholder="Enter country's name here:"
-                autoFocus
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
-                  color: '#e3ece9',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
-                  width: 220,
-                  outline: 'none',
-                }}
-              />
-              <span>
-                {guessed.size} / {guessableNames.length} guessed
-              </span>
-            </div>
-
-            <div
+            )}
+            <button
+              type="button"
+              onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                padding: '6px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                background: 'rgba(10, 19, 18, 0.75)',
-                color: '#e3ece9',
-                fontSize: 13,
-                flexWrap: 'wrap',
+                padding: '6px 10px',
+                borderRadius: 6,
+                border: 'none',
+                background: '#ef4444',
+                color: '#fff',
+                cursor: 'pointer',
               }}
             >
-              <span style={{ color: 'rgba(227, 236, 233, 0.7)' }}>
-                Viewing: <strong style={{ color: viewingContinent ? VIEWING_COLOR[viewingContinent] : '#e3ece9' }}>{viewingContinent ?? '—'}</strong>
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowMissing((s) => !s)}
-                style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
-              >
-                {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowTerritories((s) => !s)}
-                style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
-              >
-                {showTerritories ? 'Hide Territories & Other Data' : 'Show Territories & Other Data'}
-              </button>
-              <Link to="/" style={{ color: '#e3ece9' }}>
-                Back to Explore
-              </Link>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)' }}>
-              {CONTINENT_ORDER.map((continent) => {
-                const entries = displayByContinent.get(continent) ?? []
-                const progress = continentProgress.get(continent)
-                return (
-                  <div key={continent} style={{ ...panelStyle, width: 160, maxHeight: '100%', overflowY: 'auto' }}>
-                    <div
-                      style={{
-                        padding: '6px 10px',
-                        fontWeight: 700,
-                        color: '#0a1312',
-                        background: CONTINENT_COLOR[continent],
-                        position: 'sticky',
-                        top: 0,
-                      }}
-                    >
-                      {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
-                    </div>
-                    {entries.map(({ name, isGuessed }) => (
-                      <div key={name} style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>
-                        {name}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })}
-            </div>
+              {isGameOver ? 'Play Again' : 'Give Up?'}
+            </button>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(event) => handleInputChange(event.target.value)}
+              disabled={isInputDisabled}
+              placeholder="Enter country's name here:"
+              autoFocus
+              style={{
+                padding: '8px 10px',
+                borderRadius: 6,
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
+                color: '#e3ece9',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                width: 220,
+                outline: 'none',
+              }}
+            />
+            <span>
+              {guessed.size} / {guessableNames.length} guessed
+            </span>
           </div>
 
-          {showTerritories && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                zIndex: 1,
-                display: 'flex',
-                gap: 12,
-                maxHeight: 'calc(100vh - 32px)',
-              }}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '6px 14px',
+              borderRadius: 8,
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(10, 19, 18, 0.75)',
+              color: '#e3ece9',
+              fontSize: 13,
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowMissing((s) => !s)}
+              style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
             >
-              <div style={{ ...panelStyle, width: 220, maxHeight: '100%', overflowY: 'auto', color: '#e3ece9' }}>
-                <div style={{ padding: '8px 10px', fontWeight: 700, position: 'sticky', top: 0, background: 'rgba(10, 19, 18, 0.97)' }}>
-                  On the globe, not in the quiz
-                </div>
-                <div style={{ padding: '0 10px 8px', fontSize: 12, color: 'rgba(227, 236, 233, 0.6)' }}>
-                  Dependent territories and Antarctica render on the map but aren't guessable countries.
-                </div>
-                {hasAntarctica && (
-                  <div style={{ padding: '4px 10px', color: 'rgba(227, 236, 233, 0.9)' }}>Antarctica</div>
-                )}
-                {CONTINENT_ORDER.map((continent) => {
-                  const names = territoriesByContinent.get(continent)
-                  if (!names || names.length === 0) return null
-                  return (
-                    <div key={continent}>
-                      <div
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          letterSpacing: 0.4,
-                          textTransform: 'uppercase',
-                          color: CONTINENT_COLOR[continent],
-                        }}
-                      >
-                        {continent}
-                      </div>
-                      {names.map((name) => (
-                        <div key={name} style={{ padding: '4px 10px', color: 'rgba(227, 236, 233, 0.9)' }}>
-                          {name} <span style={{ color: 'rgba(227, 236, 233, 0.5)' }}>({TERRITORY_PARENT[name]})</span>
-                        </div>
-                      ))}
+              {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
+            </button>
+            <Link to="/" style={{ color: '#e3ece9' }}>
+              Back to Explore
+            </Link>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)' }}>
+            {QUIZ_CONTINENT_ORDER.map((continent) => {
+              const entries = displayByContinent.get(continent) ?? []
+              const progress = continentProgress.get(continent)
+              return (
+                <div key={continent} style={{ ...panelStyle, width: 160, maxHeight: '100%', overflowY: 'auto' }}>
+                  <div
+                    style={{
+                      padding: '6px 10px',
+                      fontWeight: 700,
+                      color: '#0a1312',
+                      background: CONTINENT_COLOR[continent],
+                      position: 'sticky',
+                      top: 0,
+                    }}
+                  >
+                    {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
+                  </div>
+                  {entries.map(({ name, isGuessed }) => (
+                    <div key={name} style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>
+                      {name}
+                      {name in TERRITORY_PARENT && (
+                        <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}> ({TERRITORY_PARENT[name]})</span>
+                      )}
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
