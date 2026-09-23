@@ -211,9 +211,20 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     const worldGroup = worldGroupRef.current
     if (!globe || !worldGroup || countries.length === 0) return
 
-    const { group, colorAttribute, rangesByName } = buildWorldLayer(countries, globe.getGlobeRadius())
-    worldGroup.add(group)
-    worldLayerRef.current = { colorAttribute, rangesByName }
+    // Without this try/catch, a failure here (e.g. mergeGeometries choking
+    // on a country whose rings produced inconsistent vertex attributes)
+    // left the globe rendering fine — atmosphere, ocean, stars all present —
+    // just with no land ever added, and nothing to distinguish that from
+    // still loading: isLoading is already false once countries is populated,
+    // so the failure was as invisible as the unguarded fetch this same
+    // pattern already fixes above.
+    try {
+      const { group, colorAttribute, rangesByName } = buildWorldLayer(countries, globe.getGlobeRadius())
+      worldGroup.add(group)
+      worldLayerRef.current = { colorAttribute, rangesByName }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to render world data')
+    }
   }, [countries])
 
   const paintCountry = useCallback((name: string, color: Color) => {
