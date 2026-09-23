@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
-import { geoCentroid, geoContains } from 'd3'
+import { geoCentroid } from 'd3'
 import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { buildGuessLookup, matchGuess } from './countryAliases'
@@ -13,6 +13,12 @@ const MISSING_POINT_COLOR = '#fbbf24'
 const GAME_DURATION_SECONDS = 15 * 60
 const VIEW_POLL_INTERVAL_MS = 400
 
+// "Viewing: X" covers the whole sphere, oceans included, so it needs one
+// more zone than the guessable continents: Antarctica isn't a country and
+// has no guessable countries of its own, but it's still real estate on the
+// globe worth naming when the camera's pointed at it.
+type ViewingRegion = Continent | 'Antarctica'
+
 // Matches each continent to its own color, both for the guessed-country
 // panels and the remaining-count badges, so they're distinguishable at a
 // glance rather than all reading as one undifferentiated green list.
@@ -23,6 +29,18 @@ const CONTINENT_COLOR: Record<Continent, string> = {
   'North America': '#fb923c',
   Oceania: '#22d3ee',
   'South America': '#4ade80',
+}
+const VIEWING_COLOR: Record<ViewingRegion, string> = { ...CONTINENT_COLOR, Antarctica: '#e2e8f0' }
+
+// Converts a lng/lat pair to a unit vector on the sphere, so "nearest zone"
+// can be answered with a dot product instead of point-in-polygon testing —
+// the only way to give every ocean point a zone too, not just points that
+// happen to land inside a country's coastline.
+function toUnitVector(lng: number, lat: number): [number, number, number] {
+  const lambda = (lng * Math.PI) / 180
+  const phi = (lat * Math.PI) / 180
+  const cosPhi = Math.cos(phi)
+  return [cosPhi * Math.cos(lambda), cosPhi * Math.sin(lambda), Math.sin(phi)]
 }
 
 function formatTime(totalSeconds: number): string {
@@ -80,7 +98,7 @@ function WorldQuiz() {
   const [hasGivenUp, setHasGivenUp] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [showTerritories, setShowTerritories] = useState(false)
-  const [viewingContinent, setViewingContinent] = useState<Continent | null>(null)
+  const [viewingContinent, setViewingContinent] = useState<ViewingRegion | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -90,23 +108,59 @@ function WorldQuiz() {
     return () => clearTimeout(timeout)
   }, [hasStarted, secondsLeft, isPaused, isGameOver])
 
+  // One anchor point per zone (each continent's countries averaged into a
+  // single point on the sphere, plus Antarctica's own centroid), used below
+  // to partition the entire globe — oceans included — into the nearest
+  // zone by angular distance, rather than only naming a zone when the
+  // camera happens to be over land.
+  const viewingAnchors = useMemo(() => {
+    const sums = new Map<ViewingRegion, [number, number, number]>()
+    for (const name of guessableNames) {
+      const centroid = centroidByName.get(name)
+      if (!centroid) continue
+      const continent = CONTINENT_BY_COUNTRY[name]
+      const vec = toUnitVector(centroid[0], centroid[1])
+      const sum = sums.get(continent) ?? [0, 0, 0]
+      sums.set(continent, [sum[0] + vec[0], sum[1] + vec[1], sum[2] + vec[2]])
+    }
+    const antarctica = countries.find((c) => c.properties.NAME === 'Antarctica')
+    if (antarctica) {
+      const [lng, lat] = geoCentroid(antarctica)
+      sums.set('Antarctica', toUnitVector(lng, lat))
+    }
+    const anchors = new Map<ViewingRegion, [number, number, number]>()
+    for (const [region, [x, y, z]] of sums) {
+      const length = Math.hypot(x, y, z) || 1
+      anchors.set(region, [x / length, y / length, z / length])
+    }
+    return anchors
+  }, [guessableNames, centroidByName, countries])
+
   // globe.gl has no "camera changed" event, so this polls pointOfView()
-  // instead — cheap relative to the poll interval, and point-in-polygon
-  // testing against ~240 countries a few times a second is well within
-  // budget. Whatever country contains the current look-at point (if any)
-  // determines which continent is showing as "currently viewing".
+  // instead — cheap relative to the poll interval, same as checking 7
+  // dot products every tick. Whichever zone anchor is angularly closest to
+  // the current look-at point determines what's showing as "currently
+  // viewing", covering ocean the same as land.
   useEffect(() => {
-    if (!hasStarted) return
+    if (!hasStarted || viewingAnchors.size === 0) return
     const interval = setInterval(() => {
       const globe = globeRef.current
       if (!globe) return
       const { lat, lng } = globe.pointOfView()
-      const country = countries.find((c) => geoContains(c, [lng, lat]))
-      const continent = country ? (CONTINENT_BY_COUNTRY[country.properties.NAME] ?? null) : null
-      setViewingContinent(continent)
+      const point = toUnitVector(lng, lat)
+      let closest: ViewingRegion | null = null
+      let bestDot = -Infinity
+      for (const [region, anchor] of viewingAnchors) {
+        const dot = point[0] * anchor[0] + point[1] * anchor[1] + point[2] * anchor[2]
+        if (dot > bestDot) {
+          bestDot = dot
+          closest = region
+        }
+      }
+      setViewingContinent(closest)
     }, VIEW_POLL_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [hasStarted, countries, globeRef])
+  }, [hasStarted, viewingAnchors, globeRef])
 
   // A location hint, not an answer reveal: small dots at each unguessed
   // country's centroid (matching how these quizzes conventionally offer a
@@ -339,7 +393,7 @@ function WorldQuiz() {
               }}
             >
               <span style={{ color: 'rgba(227, 236, 233, 0.7)' }}>
-                Viewing: <strong style={{ color: viewingContinent ? CONTINENT_COLOR[viewingContinent] : '#e3ece9' }}>{viewingContinent ?? '—'}</strong>
+                Viewing: <strong style={{ color: viewingContinent ? VIEWING_COLOR[viewingContinent] : '#e3ece9' }}>{viewingContinent ?? '—'}</strong>
               </span>
               <button
                 type="button"
