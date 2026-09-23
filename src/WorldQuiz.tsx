@@ -83,6 +83,7 @@ function WorldQuiz() {
   const [isPaused, setIsPaused] = useState(false)
   const [hasGivenUp, setHasGivenUp] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
+  const [showProgress, setShowProgress] = useState(false)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -91,6 +92,14 @@ function WorldQuiz() {
     const timeout = setTimeout(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000)
     return () => clearTimeout(timeout)
   }, [hasStarted, secondsLeft, isPaused, isGameOver])
+
+  // The progress panel stays collapsed during play so it never blocks the
+  // globe, but the game-over reveal (every country, green or red) is the
+  // whole point of finishing — auto-opening it here means that still shows
+  // up without an extra click.
+  useEffect(() => {
+    if (isGameOver) setShowProgress(true)
+  }, [isGameOver])
 
   // A location hint, not an answer reveal: small dots at each unguessed
   // country's centroid (matching how these quizzes conventionally offer a
@@ -155,6 +164,7 @@ function WorldQuiz() {
     setIsPaused(false)
     setHasGivenUp(false)
     setShowMissing(false)
+    setShowProgress(false)
     inputRef.current?.focus()
   }
 
@@ -332,50 +342,64 @@ function WorldQuiz() {
             >
               {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowProgress((s) => !s)}
+              style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
+            >
+              {showProgress ? 'Hide Progress ▲' : 'Show Progress ▼'}
+            </button>
             <Link to="/" style={{ color: '#e3ece9' }}>
               Back to Explore
             </Link>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)' }}>
-            {CONTINENT_ORDER.map((continent) => {
-              const entries = displayByContinent.get(continent) ?? []
-              const progress = continentProgress.get(continent)
-              return (
-                <div key={continent} style={{ ...panelStyle, width: 160, maxHeight: '100%', overflowY: 'auto' }}>
-                  <div
-                    style={{
-                      padding: '6px 10px',
-                      fontWeight: 700,
-                      color: '#0a1312',
-                      background: CONTINENT_COLOR[continent],
-                      position: 'sticky',
-                      top: 0,
-                    }}
-                  >
-                    {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
-                  </div>
-                  {entries.map(({ name, isGuessed, territories }) => (
-                    <div key={name}>
-                      <div style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
-                      {territories.map((territory) => (
-                        <div
-                          key={territory}
-                          style={{
-                            padding: '2px 10px 2px 20px',
-                            fontSize: 11,
-                            color: isGuessed ? 'rgba(74, 222, 128, 0.75)' : 'rgba(239, 68, 68, 0.75)',
-                          }}
-                        >
-                          {territory}
-                        </div>
-                      ))}
+          {showProgress && (
+            // overflowX + flexShrink: 0 on each panel — without them, six
+            // 160px panels (960px) get squeezed to fit a phone-width
+            // viewport instead of scrolling, shrinking every name down to
+            // an unreadable sliver. This way mobile swipes sideways
+            // instead, same as the desktop layout just scrollable.
+            <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)', overflowX: 'auto' }}>
+              {CONTINENT_ORDER.map((continent) => {
+                const entries = displayByContinent.get(continent) ?? []
+                const progress = continentProgress.get(continent)
+                return (
+                  <div key={continent} style={{ ...panelStyle, width: 160, flexShrink: 0, maxHeight: '100%', overflowY: 'auto' }}>
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        fontWeight: 700,
+                        color: '#0a1312',
+                        background: CONTINENT_COLOR[continent],
+                        position: 'sticky',
+                        top: 0,
+                      }}
+                    >
+                      {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
                     </div>
-                  ))}
-                </div>
-              )
-            })}
-          </div>
+                    {entries.map(({ name, isGuessed, territories }) => (
+                      <div key={name}>
+                        <div style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
+                        {territories.length > 0 && (
+                          <div
+                            style={{
+                              padding: '0 10px 4px 20px',
+                              fontSize: 11,
+                              lineHeight: 1.4,
+                              color: isGuessed ? 'rgba(74, 222, 128, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                            }}
+                          >
+                            {territories.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
