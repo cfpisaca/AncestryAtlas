@@ -21,7 +21,11 @@ function labelFor(name: string): string {
 export default function CountryPicker({ countryNamesByContinent, selectedName, onSelect }: CountryPickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  // -1 means nothing highlighted. Defaulting this to 0 on open lit up the
+  // first row (usually "All countries") immediately, before the mouse or
+  // keyboard had touched anything — reading as a highlight that just
+  // appears on its own rather than tracking where you actually are.
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -73,7 +77,7 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
       setHighlightedIndex((i) => Math.min(i + 1, navigableItems.length - 1))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setHighlightedIndex((i) => Math.max(i - 1, 0))
+      setHighlightedIndex((i) => (i <= 0 ? 0 : i - 1))
     } else if (event.key === 'Enter') {
       event.preventDefault()
       const item = navigableItems[highlightedIndex]
@@ -87,11 +91,8 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
     <div
       ref={containerRef}
       style={{
-        position: 'absolute',
-        top: 16,
-        left: 16,
-        zIndex: 1,
-        width: 'min(280px, calc(100vw - 32px))',
+        position: 'relative',
+        width: '100%',
         fontFamily: 'system-ui, sans-serif',
         fontSize: 14,
       }}
@@ -100,7 +101,7 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
         type="button"
         onClick={() => {
           setIsOpen((open) => !open)
-          setHighlightedIndex(0)
+          setHighlightedIndex(-1)
         }}
         style={{
           width: '100%',
@@ -120,6 +121,11 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
       {isOpen && (
         <div
           style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 10,
             marginTop: 4,
             background: 'rgba(8, 16, 15, 0.97)',
             border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -137,7 +143,7 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
-              setHighlightedIndex(0)
+              setHighlightedIndex(-1)
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search countries..."
@@ -162,6 +168,7 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
                     label="All countries"
                     isSelected={selectedName === ''}
                     isHighlighted={navigableItems[highlightedIndex] === 'all'}
+                    onMouseEnter={() => setHighlightedIndex(navigableItems.indexOf('all'))}
                     onClick={() => selectItem('all')}
                   />
                 )}
@@ -188,6 +195,7 @@ export default function CountryPicker({ countryNamesByContinent, selectedName, o
                           label={labelFor(name)}
                           isSelected={selectedName === name}
                           isHighlighted={navigableItems[highlightedIndex] === name}
+                          onMouseEnter={() => setHighlightedIndex(navigableItems.indexOf(name))}
                           onClick={() => selectItem(name)}
                         />
                       ))}
@@ -207,15 +215,18 @@ function CountryRow({
   label,
   isSelected,
   isHighlighted,
+  onMouseEnter,
   onClick,
 }: {
   label: string
   isSelected: boolean
   isHighlighted: boolean
+  onMouseEnter: () => void
   onClick: () => void
 }) {
   return (
     <div
+      onMouseEnter={onMouseEnter}
       onClick={onClick}
       style={{
         padding: '8px 12px',

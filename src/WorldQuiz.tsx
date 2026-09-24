@@ -1,10 +1,11 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoCentroid } from 'd3'
 import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
+import Sidebar from './Sidebar'
 import { LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const GUESSED_COLOR = new Color('#4ade80')
@@ -51,13 +52,6 @@ function formatTime(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-const panelStyle: CSSProperties = {
-  borderRadius: 8,
-  border: '1px solid rgba(255, 255, 255, 0.15)',
-  background: 'rgba(10, 19, 18, 0.85)',
-  fontSize: 13,
-}
-
 function WorldQuiz() {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
 
@@ -83,12 +77,11 @@ function WorldQuiz() {
   const [isPaused, setIsPaused] = useState(false)
   const [hasGivenUp, setHasGivenUp] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
-  const [showProgress, setShowProgress] = useState(false)
   // Accordion: only one continent's list open at a time during play, so
-  // the panel never has to hold more than one continent's worth of
+  // the sidebar never has to hold more than one continent's worth of
   // country rows at once. At game over every continent opens regardless —
-  // see isContinentOpen below — since the whole point of finishing is
-  // seeing the full reveal without clicking through each one.
+  // see isOpen below — since the whole point of finishing is seeing the
+  // full reveal without clicking through each one.
   const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
@@ -98,14 +91,6 @@ function WorldQuiz() {
     const timeout = setTimeout(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000)
     return () => clearTimeout(timeout)
   }, [hasStarted, secondsLeft, isPaused, isGameOver])
-
-  // The progress panel stays collapsed during play so it never blocks the
-  // globe, but the game-over reveal (every country, green or red) is the
-  // whole point of finishing — auto-opening it here means that still shows
-  // up without an extra click.
-  useEffect(() => {
-    if (isGameOver) setShowProgress(true)
-  }, [isGameOver])
 
   // A location hint, not an answer reveal: small dots at each unguessed
   // country's centroid (matching how these quizzes conventionally offer a
@@ -199,7 +184,6 @@ function WorldQuiz() {
     setIsPaused(false)
     setHasGivenUp(false)
     setShowMissing(false)
-    setShowProgress(false)
     setExpandedContinent(null)
     inputRef.current?.focus()
   }
@@ -246,92 +230,43 @@ function WorldQuiz() {
   const isInputDisabled = isPaused || isGameOver
 
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative', fontFamily: 'system-ui, sans-serif' }}>
-      <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
-      {!hasStarted ? (
-        <button
-          type="button"
-          onClick={() => {
-            setHasStarted(true)
-            inputRef.current?.focus()
-          }}
-          style={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            zIndex: 1,
-            padding: '12px 20px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#4ade80',
-            color: '#0a1312',
-            fontWeight: 700,
-            fontSize: 16,
-            cursor: 'pointer',
-          }}
-        >
-          Start Quiz ▶
-        </button>
-      ) : (
-        <div
-          style={{
-            position: 'absolute',
-            top: 16,
-            left: 16,
-            zIndex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            maxWidth: 'calc(100vw - 32px)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              background: 'rgba(10, 19, 18, 0.9)',
-              color: '#e3ece9',
-              fontSize: 14,
-              flexWrap: 'wrap',
-            }}
-          >
-            <span style={{ fontSize: 20, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80', minWidth: 48 }}>
-              {formatTime(secondsLeft)}
-            </span>
-            {!isGameOver && (
-              <button
-                type="button"
-                onClick={() => setIsPaused((p) => !p)}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  color: '#e3ece9',
-                  cursor: 'pointer',
-                }}
-              >
-                {isPaused ? 'Resume' : 'Pause'}
-              </button>
-            )}
+    <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+      <Sidebar>
+        {!hasStarted ? (
+          <>
             <button
               type="button"
-              onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
+              onClick={() => {
+                setHasStarted(true)
+                inputRef.current?.focus()
+              }}
               style={{
-                padding: '6px 10px',
-                borderRadius: 6,
+                padding: '12px 20px',
+                borderRadius: 8,
                 border: 'none',
-                background: '#ef4444',
-                color: '#fff',
+                background: '#4ade80',
+                color: '#0a1312',
+                fontWeight: 700,
+                fontSize: 16,
                 cursor: 'pointer',
               }}
             >
-              {isGameOver ? 'Play Again' : 'Give Up?'}
+              Start Quiz ▶
             </button>
+            <Link to="/" style={{ color: '#e3ece9' }}>
+              Back to Explore
+            </Link>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 24, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
+                {formatTime(secondsLeft)}
+              </span>
+              <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
+                {guessed.size} / {guessableNames.length} guessed
+              </span>
+            </div>
             <input
               ref={inputRef}
               type="text"
@@ -341,6 +276,8 @@ function WorldQuiz() {
               placeholder="Enter country's name here:"
               autoFocus
               style={{
+                width: '100%',
+                boxSizing: 'border-box',
                 padding: '8px 10px',
                 borderRadius: 6,
                 border: '1px solid rgba(255, 255, 255, 0.3)',
@@ -348,114 +285,128 @@ function WorldQuiz() {
                 color: '#e3ece9',
                 fontFamily: 'inherit',
                 fontSize: 14,
-                width: 220,
                 outline: 'none',
               }}
             />
-            <span>
-              {guessed.size} / {guessableNames.length} guessed
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              padding: '6px 14px',
-              borderRadius: 8,
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              background: 'rgba(10, 19, 18, 0.75)',
-              color: '#e3ece9',
-              fontSize: 13,
-              flexWrap: 'wrap',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setShowMissing((s) => !s)}
-              style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
-            >
-              {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowProgress((s) => !s)}
-              style={{ padding: 0, border: 'none', background: 'none', color: '#60a5fa', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}
-            >
-              {showProgress ? 'Hide Progress ▲' : 'Show Progress ▼'}
-            </button>
-            <Link to="/" style={{ color: '#e3ece9' }}>
-              Back to Explore
-            </Link>
-          </div>
-
-          {showProgress && (
-            // A single narrow column instead of six side-by-side panels —
-            // only one continent's country list is open at a time (see
-            // isContinentOpen), so this never has to hold more than one
-            // continent's rows at once, and it stays a fixed ~260px wide
-            // rather than spanning most of the screen.
-            <div style={{ ...panelStyle, width: 'min(260px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
-              {CONTINENT_ORDER.map((continent) => {
-                const entries = displayByContinent.get(continent) ?? []
-                const progress = continentProgress.get(continent)
-                const isOpen = isGameOver || expandedContinent === continent
-                return (
-                  <div key={continent}>
-                    <button
-                      type="button"
-                      onClick={() => setExpandedContinent((c) => (c === continent ? null : continent))}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        width: '100%',
-                        padding: '8px 10px',
-                        border: 'none',
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                        background: 'none',
-                        color: '#e3ece9',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: CONTINENT_COLOR[continent], flexShrink: 0 }} />
-                      <span style={{ flex: 1 }}>
-                        {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
-                      </span>
-                      <span style={{ color: 'rgba(227, 236, 233, 0.5)' }}>{isOpen ? '▾' : '▸'}</span>
-                    </button>
-                    {isOpen &&
-                      entries.map(({ name, isGuessed, territories }) => (
-                        <div key={name}>
-                          <div style={{ padding: '4px 10px 4px 26px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
-                          {territories.length > 0 && (
-                            <div
-                              style={{
-                                padding: '0 10px 4px 36px',
-                                fontSize: 11,
-                                lineHeight: 1.4,
-                                color: isGuessed ? 'rgba(74, 222, 128, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                              }}
-                            >
-                              {territories.join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                )
-              })}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!isGameOver && (
+                <button
+                  type="button"
+                  onClick={() => setIsPaused((p) => !p)}
+                  style={{
+                    flex: 1,
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#e3ece9',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {isPaused ? 'Resume' : 'Pause'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                {isGameOver ? 'Play Again' : 'Give Up?'}
+              </button>
             </div>
-          )}
-        </div>
-      )}
 
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              <button
+                type="button"
+                onClick={() => setShowMissing((s) => !s)}
+                style={{
+                  padding: 0,
+                  border: 'none',
+                  background: 'none',
+                  color: '#60a5fa',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
+                }}
+              >
+                {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
+              </button>
+              <Link to="/" style={{ color: '#e3ece9' }}>
+                Back to Explore
+              </Link>
+            </div>
+
+            <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', margin: '4px 0' }} />
+
+            {CONTINENT_ORDER.map((continent) => {
+              const entries = displayByContinent.get(continent) ?? []
+              const progress = continentProgress.get(continent)
+              const isOpen = isGameOver || expandedContinent === continent
+              return (
+                <div key={continent}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedContinent((c) => (c === continent ? null : continent))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      padding: '6px 0',
+                      border: 'none',
+                      background: 'none',
+                      color: '#e3ece9',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: CONTINENT_COLOR[continent], flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>
+                      {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
+                    </span>
+                    <span style={{ color: 'rgba(227, 236, 233, 0.5)' }}>{isOpen ? '▾' : '▸'}</span>
+                  </button>
+                  {isOpen &&
+                    entries.map(({ name, isGuessed, territories }) => (
+                      <div key={name}>
+                        <div style={{ padding: '4px 0 4px 16px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
+                        {territories.length > 0 && (
+                          <div
+                            style={{
+                              padding: '0 0 4px 26px',
+                              fontSize: 11,
+                              lineHeight: 1.4,
+                              color: isGuessed ? 'rgba(74, 222, 128, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                            }}
+                          >
+                            {territories.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )
+            })}
+          </>
+        )}
+      </Sidebar>
+      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      </div>
     </div>
   )
 }

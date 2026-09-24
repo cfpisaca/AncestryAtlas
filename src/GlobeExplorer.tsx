@@ -5,6 +5,7 @@ import { Color } from 'three'
 import { CONTINENT_BY_COUNTRY } from './continents'
 import CountryPicker from './CountryPicker'
 import GlobeStatus from './GlobeStatus'
+import Sidebar from './Sidebar'
 import { LAND_COLOR, useWorldGlobe, type CountryFeature } from './useWorldGlobe'
 
 const SELECTED_COLOR = new Color('#f2b134')
@@ -80,33 +81,33 @@ function GlobeExplorer() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      <CountryPicker
-        countryNamesByContinent={countryNamesByContinent}
-        selectedName={selectedName}
-        onSelect={flyToCountry}
-      />
-      <Link
-        to="/quiz"
-        style={{
-          position: 'absolute',
-          top: 16,
-          right: 16,
-          zIndex: 1,
-          padding: '8px 14px',
-          borderRadius: 8,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          background: 'rgba(10, 19, 18, 0.85)',
-          color: '#e3ece9',
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: 14,
-          textDecoration: 'none',
-        }}
-      >
-        Play World Quiz
-      </Link>
-      <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+    <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+      <Sidebar>
+        <CountryPicker
+          countryNamesByContinent={countryNamesByContinent}
+          selectedName={selectedName}
+          onSelect={flyToCountry}
+        />
+        <Link
+          to="/quiz"
+          style={{
+            padding: '8px 14px',
+            borderRadius: 8,
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            background: 'rgba(255, 255, 255, 0.06)',
+            color: '#e3ece9',
+            fontSize: 14,
+            textDecoration: 'none',
+            textAlign: 'center',
+          }}
+        >
+          Play World Quiz
+        </Link>
+      </Sidebar>
+      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      </div>
     </div>
   )
 }
