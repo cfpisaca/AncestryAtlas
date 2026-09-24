@@ -295,7 +295,15 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     }
     if (!country || !globe) return
     const radius = globe.getGlobeRadius()
-    const highlightRadius = radius * (1 + POLYGON_ALTITUDE + 0.0006)
+    // Only double the ordinary border's own tiny offset (0.00002), not the
+    // 0.0006 this briefly used — that's small at a continental zoom, but
+    // the camera flies in close right after a guess (see altitudeForCountry
+    // in WorldQuiz), and at Monaco- or Nauru-scale that same fraction is
+    // several actual kilometers of altitude. At an oblique close-up angle
+    // that reads as visible parallax: the ring appears to drift sideways
+    // off the real coastline instead of tracing it, worse the smaller and
+    // closer-zoomed the country is.
+    const highlightRadius = radius * (1 + POLYGON_ALTITUDE + 0.00004)
     const geometries = ringsOf(country.geometry).map(
       (ring) => new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, highlightRadius, curvatureResolutionFor(ring)),
     )
