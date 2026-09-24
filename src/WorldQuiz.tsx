@@ -323,26 +323,38 @@ function WorldQuiz() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
               <button
                 type="button"
                 onClick={() => setShowMissing((s) => !s)}
                 style={{
-                  padding: 0,
-                  border: 'none',
-                  background: 'none',
-                  color: '#60a5fa',
-                  textDecoration: 'underline',
-                  cursor: 'pointer',
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: showMissing ? '1px solid rgba(96, 165, 250, 0.5)' : '1px solid rgba(255, 255, 255, 0.2)',
+                  background: showMissing ? 'rgba(96, 165, 250, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                  color: '#e3ece9',
                   fontSize: 13,
                   fontFamily: 'inherit',
+                  cursor: 'pointer',
                   textAlign: 'left',
                 }}
               >
                 {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
               </button>
-              <Link to="/" style={{ color: '#e3ece9' }}>
-                Back to Explore
+              <Link
+                to="/"
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#e3ece9',
+                  fontSize: 13,
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                }}
+              >
+                ← Back to Explore
               </Link>
             </div>
 
