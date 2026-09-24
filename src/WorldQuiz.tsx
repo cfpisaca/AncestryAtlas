@@ -136,8 +136,16 @@ function WorldQuiz() {
     const globe = globeRef.current
     if (!globe || !showMissing) return
     const isGuessedPoint = (d: object) => guessed.has((d as { name: string }).name)
-    globe.pointColor((d) => (isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR)).pointRadius((d) => (isGuessedPoint(d) ? 0 : 0.3))
-  }, [guessed, showMissing, globeRef])
+    globe
+      .pointColor((d) => (isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR))
+      .pointRadius((d) => (isGuessedPoint(d) ? 0 : 0.3))
+      // globe.gl defaults a point's hover tooltip to its `name` field, which
+      // for these hint dots is the answer — hovering one during play would
+      // give away the exact country a location-only hint is supposed to
+      // withhold. Only reveal it once the game's already over and every
+      // country's been painted on the map anyway.
+      .pointLabel((d) => (isGameOver ? (d as { name: string }).name : ''))
+  }, [guessed, showMissing, isGameOver, globeRef])
 
   useEffect(() => {
     if (!isGameOver) return
