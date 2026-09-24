@@ -118,6 +118,31 @@
 //    polygon for it, so that one small shape is hardcoded below and added
 //    as its own feature, rather than switching this whole pipeline to a
 //    different source just for one country.
+//
+// 7. Splicing in raw, unsimplified geometry for a handful of small nations
+//    the main pipeline above treats badly (see RAW_GEOMETRY_NAMES below).
+//    Step 3's uniform 50% coastline simplification and step 4's 300km²
+//    islet-drop threshold are both tuned for large landmasses, where
+//    trimming detail or dropping a stray skerry doesn't change the
+//    recognizable shape. Applied to a nation whose defining shape *is* a
+//    scatter of small islands (Kiribati's 33 atolls, most under 100km²,
+//    collapsed to the single one that happened to clear the 300km²
+//    threshold; Tuvalu's 9 atolls, all of them small enough that even the
+//    50% simplify pass alone reduced the whole country to one degenerate
+//    4-point sliver) or a country the size of a few city blocks (Monaco,
+//    Nauru, Singapore), the result is either most of the country's islands
+//    disappearing or a coastline crushed down to a handful of almost-random
+//    points. These five skip the shared pipeline entirely and use their
+//    raw source geometry instead (cleaned, not simplified) — their combined
+//    point count is small enough next to landmasses like Canada or Russia
+//    that skipping simplification for them costs nothing noticeable.
+//    Monaco is the one exception worth calling out: it has a real land
+//    border with France, which *does* go through the main pipeline, so
+//    their shared boundary is no longer guaranteed to align exactly after
+//    this — tested and the gap is sub-kilometer, invisible at the scale
+//    this globe is ever actually viewed at, but it's a real trade-off, not
+//    a free one. The other four are islands with no shared land border
+//    with anything, so there's no such trade-off for them.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -475,6 +500,22 @@ function simplify(inputFiles, command) {
   })
 }
 
+// See part 7 in the header comment above.
+const RAW_GEOMETRY_NAMES = ['Kiribati', 'Tuvalu', 'Nauru', 'Monaco', 'Singapore']
+
+async function rawGeometryFeatures(names) {
+  const rawTopology = JSON.parse(readFileSync(sourcePath, 'utf8'))
+  const rawFeatures = feature(rawTopology, rawTopology.objects[Object.keys(rawTopology.objects)[0]]).features
+  const selected = names.map((name) => rawFeatures.find((f) => f.properties.NAME === name)).filter(Boolean)
+  const cleaned = await simplify(
+    { 'in.json': JSON.stringify({ type: 'FeatureCollection', features: selected }) },
+    // No -simplify here — that's the entire point. Just winding/topology
+    // cleanup, same as every other feature gets after its own simplify pass.
+    '-i in.json -clean rewind -filter-fields NAME -o format=geojson out.json',
+  )
+  return JSON.parse(cleaned['out.json']).features
+}
+
 // Single-quoted string literals, since the whole expression is itself
 // wrapped in double quotes for mapshaper's own command-line tokenizer
 // (`-each "..."`) — a name with an apostrophe (Côte d'Ivoire) needs that
@@ -548,8 +589,13 @@ async function simplifyAntarctica(features) {
 }
 
 const dropped = simplifiedFeatures.filter((f) => !f.geometry).map((f) => f.properties.NAME)
+const rawGeomByName = new Map(
+  (await rawGeometryFeatures(RAW_GEOMETRY_NAMES)).map((f) => [f.properties.NAME, f]),
+)
 const reduced = await simplifyAntarctica([
-  ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)),
+  ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)).map(
+    (f) => rawGeomByName.get(f.properties.NAME) ?? f,
+  ),
   VATICAN_CITY_FEATURE,
 ])
 
