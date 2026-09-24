@@ -136,15 +136,29 @@ function WorldQuiz() {
     const globe = globeRef.current
     if (!globe || !showMissing) return
     const isGuessedPoint = (d: object) => guessed.has((d as { name: string }).name)
+    // During play, a guessed country's dot disappears (radius 0) — there's
+    // nothing left to hint at. At game over every dot comes back, green or
+    // red to match how the country panels and the globe's own land fill
+    // already reveal right vs. missed, so hovering one is just another way
+    // to read the same reveal, not a separate signal.
     globe
-      .pointColor((d) => (isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR))
-      .pointRadius((d) => (isGuessedPoint(d) ? 0 : 0.3))
+      .pointColor((d) => {
+        if (isGameOver) return isGuessedPoint(d) ? '#4ade80' : '#ef4444'
+        return isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR
+      })
+      .pointRadius((d) => (isGameOver || !isGuessedPoint(d) ? 0.3 : 0))
       // globe.gl defaults a point's hover tooltip to its `name` field, which
       // for these hint dots is the answer — hovering one during play would
       // give away the exact country a location-only hint is supposed to
-      // withhold. Only reveal it once the game's already over and every
-      // country's been painted on the map anyway.
-      .pointLabel((d) => (isGameOver ? (d as { name: string }).name : ''))
+      // withhold. Only reveal it once the game's already over, and the
+      // tooltip is treated as HTML by the underlying renderer, so a plain
+      // colored span works.
+      .pointLabel((d) => {
+        if (!isGameOver) return ''
+        const name = (d as { name: string }).name
+        const color = isGuessedPoint(d) ? '#4ade80' : '#ef4444'
+        return `<span style="color: ${color}">${name}</span>`
+      })
   }, [guessed, showMissing, isGameOver, globeRef])
 
   useEffect(() => {
