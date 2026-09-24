@@ -114,10 +114,21 @@
 // 6. Adding Vatican City. Natural Earth's admin-0 map subunits layer (the
 //    source this whole script is built on) carries a "Vatican" entry with
 //    no geometry at all attached — not a hole in Italy, not a filled shape,
-//    nothing. Their plainer admin-0 *countries* layer does have a real
-//    polygon for it, so that one small shape is hardcoded below and added
-//    as its own feature, rather than switching this whole pipeline to a
-//    different source just for one country.
+//    nothing. data/sources/vatican-city.geojson is its real ADM0 boundary
+//    from geoBoundaries (CC-BY 4.0 — see https://www.geoboundaries.org),
+//    added as its own feature the same way the hardcoded placeholder this
+//    replaced was. geoBoundaries was evaluated as a full replacement for
+//    the whole pipeline, not just this one gap — abandoned: its 229
+//    country files each come from a different, independent source (OSM in
+//    some cases, satellite land-cover in others, national surveys
+//    elsewhere), unlike Natural Earth's one consistent dataset where every
+//    country's borders are guaranteed to line up with its neighbors'.
+//    Combined and simplified, that produced tens of thousands of
+//    unresolved geometry intersections between adjacent countries and
+//    outright broke rendering on at least one feature. Vatican has no
+//    neighbor going through this pipeline to misalign with (Italy's shape
+//    doesn't depend on it), so it's a safe, isolated case to take from the
+//    better source anyway.
 //
 // 7. Splicing in raw, unsimplified geometry for a handful of small nations
 //    the main pipeline above treats badly (see RAW_GEOMETRY_NAMES below).
@@ -472,26 +483,15 @@ function fixOrphanHoles(features) {
   })
 }
 
-// See part 6 in the header comment above — hardcoded from Natural Earth's
-// admin-0 countries layer since the map-subunits source this script
-// otherwise uses has no geometry for Vatican City at all.
-const VATICAN_CITY_FEATURE = {
-  type: 'Feature',
-  properties: { NAME: 'Vatican City' },
-  geometry: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [12.453137, 41.902752],
-        [12.452714, 41.903016],
-        [12.452767, 41.903439],
-        [12.453031, 41.903915],
-        [12.453983, 41.903862],
-        [12.454035, 41.902752],
-        [12.453137, 41.902752],
-      ],
-    ],
-  },
+// See part 6 in the header comment above.
+const vaticanSourcePath = `${rootDir}data/sources/vatican-city.geojson`
+
+async function vaticanCityFeature() {
+  const cleaned = await simplify(
+    { 'in.json': readFileSync(vaticanSourcePath, 'utf8') },
+    '-i in.json -clean rewind -each "NAME=shapeName" -filter-fields NAME -o format=geojson out.json',
+  )
+  return JSON.parse(cleaned['out.json']).features[0]
 }
 
 function simplify(inputFiles, command) {
@@ -596,7 +596,7 @@ const reduced = await simplifyAntarctica([
   ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)).map(
     (f) => rawGeomByName.get(f.properties.NAME) ?? f,
   ),
-  VATICAN_CITY_FEATURE,
+  await vaticanCityFeature(),
 ])
 
 const ringsBefore = simplifiedFeatures.reduce(
