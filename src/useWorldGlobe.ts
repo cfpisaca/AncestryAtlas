@@ -24,7 +24,11 @@ const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
 export const LAND_COLOR = new Color('#3fae8f')
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
-export const HIGHLIGHT_COLOR = '#fbbf24'
+// White — deliberately not reused from anywhere else in the palette (land
+// teal, guessed green, missed red, or the amber hint dots) so it always
+// reads as its own distinct signal instead of blending into whichever of
+// those happens to already be on screen near it.
+export const HIGHLIGHT_COLOR = '#ffffff'
 const HIGHLIGHT_MATERIAL = new LineBasicMaterial({ color: HIGHLIGHT_COLOR })
 
 const DEFAULT_FLY_ALTITUDE = 1.4

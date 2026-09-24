@@ -258,6 +258,17 @@ function WorldQuiz() {
     return totals
   }, [guessableNames, guessed])
 
+  // Whichever continent is currently open moves to the top of the
+  // accordion — same reasoning as sorting the guessed list itself by
+  // recency: without this, guessing into e.g. Oceania (near the bottom of
+  // CONTINENT_ORDER) opens its list below several collapsed continents
+  // you'd have to scroll past to see it. At game over every continent is
+  // open at once anyway, so there's no single "open one" to promote.
+  const orderedContinents = useMemo(() => {
+    if (isGameOver || !expandedContinent) return CONTINENT_ORDER
+    return [expandedContinent, ...CONTINENT_ORDER.filter((c) => c !== expandedContinent)]
+  }, [expandedContinent, isGameOver])
+
   const isInputDisabled = !hasStarted || isPaused || isGameOver
 
   return (
@@ -392,7 +403,7 @@ function WorldQuiz() {
 
             <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', margin: '4px 0' }} />
 
-            {CONTINENT_ORDER.map((continent) => {
+            {orderedContinents.map((continent) => {
               const entries = displayByContinent.get(continent) ?? []
               const progress = continentProgress.get(continent)
               const isOpen = isGameOver || expandedContinent === continent
