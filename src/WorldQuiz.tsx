@@ -6,7 +6,7 @@ import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { altitudeForCountry, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
@@ -53,7 +53,9 @@ function formatTime(totalSeconds: number): string {
 }
 
 function WorldQuiz() {
-  const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
+  const { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry } = useWorldGlobe({
+    autoRotate: false,
+  })
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
   // dependent territories aren't separately guessable (see
@@ -191,6 +193,7 @@ function WorldQuiz() {
       const [lng, lat] = geoCentroid(country)
       globe.pointOfView({ lat, lng, altitude: altitudeForCountry(country) }, 1200)
     }
+    highlightCountry(country ?? null)
     setInput('')
   }
 
@@ -199,6 +202,7 @@ function WorldQuiz() {
       paintCountry(name, LAND_COLOR)
       for (const territory of TERRITORIES_BY_COUNTRY[name] ?? []) paintCountry(territory, LAND_COLOR)
     }
+    highlightCountry(null)
     setGuessed(new Set())
     setInput('')
     setSecondsLeft(GAME_DURATION_SECONDS)
@@ -426,7 +430,7 @@ function WorldQuiz() {
                           style={{
                             padding: '4px 6px 4px 16px',
                             borderRadius: 4,
-                            border: !isGameOver && name === lastGuessed ? '1px solid rgba(74, 222, 128, 0.6)' : '1px solid transparent',
+                            border: !isGameOver && name === lastGuessed ? `1px solid ${HIGHLIGHT_COLOR}` : '1px solid transparent',
                             color: isGuessed ? '#4ade80' : '#ef4444',
                           }}
                         >

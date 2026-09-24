@@ -24,6 +24,8 @@ const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
 export const LAND_COLOR = new Color('#3fae8f')
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
+export const HIGHLIGHT_COLOR = '#fbbf24'
+const HIGHLIGHT_MATERIAL = new LineBasicMaterial({ color: HIGHLIGHT_COLOR })
 
 const DEFAULT_FLY_ALTITUDE = 1.4
 const MIN_FLY_ALTITUDE = 0.01
@@ -273,7 +275,33 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     paintRange(layer.colorAttribute, layer.rangesByName.get(name), color)
   }, [])
 
+  const highlightRef = useRef<LineSegments | null>(null)
+
+  // Draws a bright ring around one country's actual coastline, on top of
+  // both the land cap and the ordinary border layer — used to call out
+  // e.g. "the country you just guessed" distinctly from a same-colored fill
+  // alone. Passing null clears it. Only ever one highlight at a time: the
+  // previous ring is removed before (or instead of) adding a new one.
+  const highlightCountry = useCallback((country: CountryFeature | null) => {
+    const worldGroup = worldGroupRef.current
+    const globe = globeRef.current
+    if (!worldGroup) return
+    if (highlightRef.current) {
+      worldGroup.remove(highlightRef.current)
+      highlightRef.current = null
+    }
+    if (!country || !globe) return
+    const radius = globe.getGlobeRadius()
+    const highlightRadius = radius * (1 + POLYGON_ALTITUDE + 0.0006)
+    const geometries = ringsOf(country.geometry).map(
+      (ring) => new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, highlightRadius, curvatureResolutionFor(ring)),
+    )
+    const line = new LineSegments(mergeGeometries(geometries, false), HIGHLIGHT_MATERIAL)
+    worldGroup.add(line)
+    highlightRef.current = line
+  }, [])
+
   const isLoading = !worldReady && !loadError
 
-  return { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry }
+  return { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry }
 }
