@@ -6,15 +6,11 @@ import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { altitudeForCountry, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
 const MISSING_POINT_COLOR = '#fbbf24'
-// Deliberately its own color, not the map's gold ring (HIGHLIGHT_COLOR in
-// useWorldGlobe.ts) — the two highlights live in different visual contexts
-// and don't need to match.
-const SIDEBAR_HIGHLIGHT_COLOR = '#4ade80'
 const GAME_DURATION_SECONDS = 15 * 60
 
 // TERRITORY_PARENT's values are short display labels ('US', 'UK'), not
@@ -445,7 +441,7 @@ function WorldQuiz() {
                           style={{
                             padding: '4px 6px 4px 16px',
                             borderRadius: 4,
-                            border: !isGameOver && name === lastGuessed ? `1px solid ${SIDEBAR_HIGHLIGHT_COLOR}` : '1px solid transparent',
+                            border: !isGameOver && name === lastGuessed ? `1px solid ${HIGHLIGHT_COLOR}` : '1px solid transparent',
                             color: isGuessed ? '#4ade80' : '#ef4444',
                           }}
                         >

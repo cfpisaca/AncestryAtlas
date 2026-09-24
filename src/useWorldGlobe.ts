@@ -24,9 +24,9 @@ const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
 export const LAND_COLOR = new Color('#3fae8f')
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
-// Gold, matching the missing-country hint dots — the map-ring highlight.
-// The sidebar's own most-recent-guess outline is a separate, unrelated
-// color (green, set in WorldQuiz.tsx) rather than reusing this one.
+// Gold, matching the missing-country hint dots — used both for the map's
+// highlight ring and, imported directly rather than duplicated, for the
+// sidebar's own most-recent-guess outline in WorldQuiz.tsx.
 export const HIGHLIGHT_COLOR = '#fbbf24'
 const HIGHLIGHT_MATERIAL = new LineBasicMaterial({ color: HIGHLIGHT_COLOR })
 
