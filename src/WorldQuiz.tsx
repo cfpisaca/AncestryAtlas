@@ -6,7 +6,7 @@ import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { altitudeForCountry, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
@@ -64,6 +64,7 @@ function WorldQuiz() {
     [countries],
   )
   const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
+  const countryByName = useMemo(() => new Map(countries.map((c) => [c.properties.NAME, c])), [countries])
   const centroidByName = useMemo(() => {
     const map = new Map<string, [number, number]>()
     for (const country of countries) map.set(country.properties.NAME, geoCentroid(country))
@@ -91,6 +92,14 @@ function WorldQuiz() {
     const timeout = setTimeout(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000)
     return () => clearTimeout(timeout)
   }, [hasStarted, secondsLeft, isPaused, isGameOver])
+
+  // The input only mounts once the quiz starts, so focusing it from the
+  // Start Quiz button's own click handler would fire before that render
+  // even happens — the ref is still null at that point. An effect keyed on
+  // hasStarted runs after the input has actually mounted.
+  useEffect(() => {
+    if (hasStarted) inputRef.current?.focus()
+  }, [hasStarted])
 
   // A location hint, not an answer reveal: small dots at each unguessed
   // country's centroid (matching how these quizzes conventionally offer a
@@ -174,6 +183,12 @@ function WorldQuiz() {
     // so the country you just got is immediately visible instead of
     // requiring a manual click over to its tab.
     setExpandedContinent(CONTINENT_BY_COUNTRY[match])
+    const globe = globeRef.current
+    const country = countryByName.get(match)
+    if (globe && country) {
+      const [lng, lat] = geoCentroid(country)
+      globe.pointOfView({ lat, lng, altitude: altitudeForCountry(country) }, 1200)
+    }
     setInput('')
   }
 
@@ -241,54 +256,55 @@ function WorldQuiz() {
             <span style={{ fontSize: 24, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
               {formatTime(secondsLeft)}
             </span>
-            <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
-              {guessed.size} / {guessableNames.length} guessed
-            </span>
-          </div>
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(event) => handleInputChange(event.target.value)}
-            disabled={isInputDisabled}
-            placeholder="Enter country's name here:"
-            autoFocus
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '8px 10px',
-              borderRadius: 6,
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
-              color: '#e3ece9',
-              fontFamily: 'inherit',
-              fontSize: 14,
-              outline: 'none',
-            }}
-          />
-          <div style={{ display: 'flex', gap: 8 }}>
-            {!hasStarted ? (
+            {hasStarted ? (
+              <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
+                {guessed.size} / {guessableNames.length} guessed
+              </span>
+            ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setHasStarted(true)
-                  inputRef.current?.focus()
-                }}
+                onClick={() => setHasStarted(true)}
                 style={{
-                  flex: 1,
                   padding: '6px 10px',
                   borderRadius: 6,
                   border: 'none',
                   background: '#4ade80',
                   color: '#0a1312',
                   fontWeight: 700,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
                   cursor: 'pointer',
                 }}
               >
                 Start Quiz ▶
               </button>
-            ) : (
-              <>
+            )}
+          </div>
+
+          {hasStarted && (
+            <>
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(event) => handleInputChange(event.target.value)}
+                disabled={isInputDisabled}
+                placeholder="Enter country's name here:"
+                autoFocus
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '8px 10px',
+                  borderRadius: 6,
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
+                  color: '#e3ece9',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
                 {!isGameOver && (
                   <button
                     type="button"
@@ -321,28 +337,30 @@ function WorldQuiz() {
                 >
                   {isGameOver ? 'Play Again' : 'Give Up?'}
                 </button>
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
-              <button
-                type="button"
-                onClick={() => setShowMissing((s) => !s)}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  border: showMissing ? '1px solid rgba(96, 165, 250, 0.5)' : '1px solid rgba(255, 255, 255, 0.2)',
-                  background: showMissing ? 'rgba(96, 165, 250, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-                  color: '#e3ece9',
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                }}
-              >
-                {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
-              </button>
+              {hasStarted && (
+                <button
+                  type="button"
+                  onClick={() => setShowMissing((s) => !s)}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    border: showMissing ? '1px solid rgba(96, 165, 250, 0.5)' : '1px solid rgba(255, 255, 255, 0.2)',
+                    background: showMissing ? 'rgba(96, 165, 250, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                    color: '#e3ece9',
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                  }}
+                >
+                  {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
+                </button>
+              )}
               <Link
                 to="/"
                 style={{

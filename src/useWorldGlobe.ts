@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { geoArea } from 'd3'
+import { geoArea, geoBounds } from 'd3'
 import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import Globe, { type GlobeInstance } from 'globe.gl'
 import { feature } from 'topojson-client'
@@ -24,6 +24,28 @@ const OCEAN_MATERIAL = new MeshPhongMaterial({ color: '#0b1f2e' })
 export const LAND_COLOR = new Color('#3fae8f')
 const BORDER_MATERIAL = new LineBasicMaterial({ color: '#173330' })
 const POLYGON_ALTITUDE = 0.006
+
+const DEFAULT_FLY_ALTITUDE = 1.4
+const MIN_FLY_ALTITUDE = 0.01
+// Tuned so a France-sized country (~1000km across) lands at roughly the
+// previous fixed altitude, while a country the size of Vatican City (a few
+// hundred meters) gets clamped to MIN_FLY_ALTITUDE instead of an altitude so
+// large the country is sub-pixel — at a fixed 1.4 for every country
+// regardless of size, tiny nations were indistinguishable from whatever
+// larger country surrounds them.
+const FLY_ALTITUDE_SCALE_KM = 700
+
+// Shared by every mode that flies the camera to a country (the explorer's
+// picker, the quiz's guess-and-jump), so the same size-aware zoom applies
+// everywhere instead of each caller picking its own fixed altitude.
+export function altitudeForCountry(country: CountryFeature): number {
+  const [[minLng, minLat], [maxLng, maxLat]] = geoBounds(country)
+  const avgLatRad = ((minLat + maxLat) / 2) * (Math.PI / 180)
+  const widthKm = (maxLng - minLng) * 111 * Math.cos(avgLatRad)
+  const heightKm = (maxLat - minLat) * 111
+  const diagonalKm = Math.hypot(widthKm, heightKm)
+  return Math.min(DEFAULT_FLY_ALTITUDE, Math.max(MIN_FLY_ALTITUDE, diagonalKm / FLY_ALTITUDE_SCALE_KM))
+}
 
 function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates

@@ -1,33 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { geoBounds, geoCentroid } from 'd3'
+import { geoCentroid } from 'd3'
 import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { CONTINENT_BY_COUNTRY } from './continents'
 import CountryPicker from './CountryPicker'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { LAND_COLOR, useWorldGlobe, type CountryFeature } from './useWorldGlobe'
+import { altitudeForCountry, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
 
 const SELECTED_COLOR = new Color('#f2b134')
-
-const DEFAULT_FLY_ALTITUDE = 1.4
-const MIN_FLY_ALTITUDE = 0.01
-// Tuned so a France-sized country (~1000km across) lands at roughly the
-// previous fixed altitude, while a country the size of Vatican City (a few
-// hundred meters) gets clamped to MIN_FLY_ALTITUDE instead of an altitude so
-// large the country is sub-pixel — at a fixed 1.4 for every country
-// regardless of size, tiny nations were indistinguishable from whatever
-// larger country surrounds them.
-const FLY_ALTITUDE_SCALE_KM = 700
-
-function altitudeForCountry(country: CountryFeature): number {
-  const [[minLng, minLat], [maxLng, maxLat]] = geoBounds(country)
-  const avgLatRad = ((minLat + maxLat) / 2) * (Math.PI / 180)
-  const widthKm = (maxLng - minLng) * 111 * Math.cos(avgLatRad)
-  const heightKm = (maxLat - minLat) * 111
-  const diagonalKm = Math.hypot(widthKm, heightKm)
-  return Math.min(DEFAULT_FLY_ALTITUDE, Math.max(MIN_FLY_ALTITUDE, diagonalKm / FLY_ALTITUDE_SCALE_KM))
-}
 
 function GlobeExplorer() {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe()
