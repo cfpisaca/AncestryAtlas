@@ -84,6 +84,7 @@ function WorldQuiz() {
   // see isOpen below — since the whole point of finishing is seeing the
   // full reveal without clicking through each one.
   const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
+  const [lastGuessed, setLastGuessed] = useState<string | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -173,6 +174,7 @@ function WorldQuiz() {
     if (!match || guessed.has(match)) return
 
     setGuessed((prev) => new Set(prev).add(match))
+    setLastGuessed(match)
     paintCountry(match, GUESSED_COLOR)
     // Territories are their own landmass on the map (Puerto Rico isn't
     // part of the US's polygon), so guessing the parent has to explicitly
@@ -204,12 +206,17 @@ function WorldQuiz() {
     setHasGivenUp(false)
     setShowMissing(false)
     setExpandedContinent(null)
+    setLastGuessed(null)
     inputRef.current?.focus()
   }
 
-  // During play, only the countries you've actually gotten show up (so the
-  // list reads as a running tally). At game over, every country appears,
-  // sorted alphabetically — guessed ones stay green, the rest turn red —
+  // During play, only the countries you've actually gotten show up, most
+  // recent guess first — guessed is a Set, so iterating it already walks
+  // insertion order; reversed, that puts whatever you just typed at the
+  // top of its continent's list instead of wherever it happened to fall in
+  // the country data's fixed order, which could be anywhere below a long
+  // scroll of earlier guesses. At game over, every country appears, sorted
+  // alphabetically instead — guessed ones stay green, the rest turn red —
   // matching how these quizzes conventionally reveal the full answer key.
   // Each entry carries its territories along with it: they only appear once
   // their parent does, already colored the same as the parent, so a
@@ -217,7 +224,8 @@ function WorldQuiz() {
   // than sitting there blank beforehand.
   const displayByContinent = useMemo(() => {
     const groups = new Map<Continent, { name: string; isGuessed: boolean; territories: string[] }[]>()
-    for (const name of guessableNames) {
+    const namesInOrder = isGameOver ? guessableNames : [...guessed].reverse()
+    for (const name of namesInOrder) {
       const isGuessed = guessed.has(name)
       if (!isGameOver && !isGuessed) continue
       const continent = CONTINENT_BY_COUNTRY[name]
@@ -414,7 +422,16 @@ function WorldQuiz() {
                   {isOpen &&
                     entries.map(({ name, isGuessed, territories }) => (
                       <div key={name}>
-                        <div style={{ padding: '4px 0 4px 16px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
+                        <div
+                          style={{
+                            padding: '4px 6px 4px 16px',
+                            borderRadius: 4,
+                            border: !isGameOver && name === lastGuessed ? '1px solid rgba(74, 222, 128, 0.6)' : '1px solid transparent',
+                            color: isGuessed ? '#4ade80' : '#ef4444',
+                          }}
+                        >
+                          {name}
+                        </div>
                         {territories.length > 0 && (
                           <div
                             style={{
