@@ -170,6 +170,10 @@ function WorldQuiz() {
     // paint each one too, or they'd sit there in the default land color
     // forever, looking unrelated to the country that owns them.
     for (const territory of TERRITORIES_BY_COUNTRY[match] ?? []) paintCountry(territory, GUESSED_COLOR)
+    // Jump the accordion to whichever continent that guess just landed in,
+    // so the country you just got is immediately visible instead of
+    // requiring a manual click over to its tab.
+    setExpandedContinent(CONTINENT_BY_COUNTRY[match])
     setInput('')
   }
 
@@ -241,6 +245,8 @@ function WorldQuiz() {
                 inputRef.current?.focus()
               }}
               style={{
+                width: '100%',
+                boxSizing: 'border-box',
                 padding: '12px 20px',
                 borderRadius: 8,
                 border: 'none',
@@ -253,8 +259,20 @@ function WorldQuiz() {
             >
               Start Quiz ▶
             </button>
-            <Link to="/" style={{ color: '#e3ece9' }}>
-              Back to Explore
+            <Link
+              to="/"
+              style={{
+                padding: '6px 10px',
+                borderRadius: 6,
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: '#e3ece9',
+                fontSize: 13,
+                textDecoration: 'none',
+                textAlign: 'center',
+              }}
+            >
+              ← Back to Explore
             </Link>
           </>
         ) : (
@@ -336,7 +354,7 @@ function WorldQuiz() {
                   fontSize: 13,
                   fontFamily: 'inherit',
                   cursor: 'pointer',
-                  textAlign: 'left',
+                  textAlign: 'center',
                 }}
               >
                 {showMissing ? 'Hide Missing Countries' : 'Show Missing Countries'}
