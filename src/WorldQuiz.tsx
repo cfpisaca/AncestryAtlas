@@ -137,15 +137,12 @@ function WorldQuiz() {
     if (!globe || !showMissing) return
     const isGuessedPoint = (d: object) => guessed.has((d as { name: string }).name)
     // During play, a guessed country's dot disappears (radius 0) — there's
-    // nothing left to hint at. At game over every dot comes back, green or
-    // red to match how the country panels and the globe's own land fill
-    // already reveal right vs. missed, so hovering one is just another way
-    // to read the same reveal, not a separate signal.
+    // nothing left to hint at. At game over every dot comes back so its
+    // name can still be hovered, but the dot itself stays the same hint
+    // color throughout — only the hover text below is colored green/red to
+    // match the reveal.
     globe
-      .pointColor((d) => {
-        if (isGameOver) return isGuessedPoint(d) ? '#4ade80' : '#ef4444'
-        return isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR
-      })
+      .pointColor((d) => (!isGameOver && isGuessedPoint(d) ? 'rgba(0,0,0,0)' : MISSING_POINT_COLOR))
       .pointRadius((d) => (isGameOver || !isGuessedPoint(d) ? 0.3 : 0))
       // globe.gl defaults a point's hover tooltip to its `name` field, which
       // for these hint dots is the answer — hovering one during play would
@@ -164,7 +161,9 @@ function WorldQuiz() {
   useEffect(() => {
     if (!isGameOver) return
     for (const name of guessableNames) {
-      if (!guessed.has(name)) paintCountry(name, MISSED_COLOR)
+      if (guessed.has(name)) continue
+      paintCountry(name, MISSED_COLOR)
+      for (const territory of TERRITORIES_BY_COUNTRY[name] ?? []) paintCountry(territory, MISSED_COLOR)
     }
   }, [isGameOver, guessableNames, guessed, paintCountry])
 
@@ -175,11 +174,19 @@ function WorldQuiz() {
 
     setGuessed((prev) => new Set(prev).add(match))
     paintCountry(match, GUESSED_COLOR)
+    // Territories are their own landmass on the map (Puerto Rico isn't
+    // part of the US's polygon), so guessing the parent has to explicitly
+    // paint each one too, or they'd sit there in the default land color
+    // forever, looking unrelated to the country that owns them.
+    for (const territory of TERRITORIES_BY_COUNTRY[match] ?? []) paintCountry(territory, GUESSED_COLOR)
     setInput('')
   }
 
   const restart = () => {
-    for (const name of guessableNames) paintCountry(name, LAND_COLOR)
+    for (const name of guessableNames) {
+      paintCountry(name, LAND_COLOR)
+      for (const territory of TERRITORIES_BY_COUNTRY[name] ?? []) paintCountry(territory, LAND_COLOR)
+    }
     setGuessed(new Set())
     setInput('')
     setSecondsLeft(GAME_DURATION_SECONDS)
