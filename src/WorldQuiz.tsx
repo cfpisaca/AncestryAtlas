@@ -84,6 +84,12 @@ function WorldQuiz() {
   const [hasGivenUp, setHasGivenUp] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [showProgress, setShowProgress] = useState(false)
+  // Accordion: only one continent's list open at a time during play, so
+  // the panel never has to hold more than one continent's worth of
+  // country rows at once. At game over every continent opens regardless —
+  // see isContinentOpen below — since the whole point of finishing is
+  // seeing the full reveal without clicking through each one.
+  const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -194,6 +200,7 @@ function WorldQuiz() {
     setHasGivenUp(false)
     setShowMissing(false)
     setShowProgress(false)
+    setExpandedContinent(null)
     inputRef.current?.focus()
   }
 
@@ -384,46 +391,62 @@ function WorldQuiz() {
           </div>
 
           {showProgress && (
-            // overflowX + flexShrink: 0 on each panel — without them, six
-            // 160px panels (960px) get squeezed to fit a phone-width
-            // viewport instead of scrolling, shrinking every name down to
-            // an unreadable sliver. This way mobile swipes sideways
-            // instead, same as the desktop layout just scrollable.
-            <div style={{ display: 'flex', gap: 12, maxHeight: 'calc(100vh - 180px)', overflowX: 'auto' }}>
+            // A single narrow column instead of six side-by-side panels —
+            // only one continent's country list is open at a time (see
+            // isContinentOpen), so this never has to hold more than one
+            // continent's rows at once, and it stays a fixed ~260px wide
+            // rather than spanning most of the screen.
+            <div style={{ ...panelStyle, width: 'min(260px, calc(100vw - 32px))', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
               {CONTINENT_ORDER.map((continent) => {
                 const entries = displayByContinent.get(continent) ?? []
                 const progress = continentProgress.get(continent)
+                const isOpen = isGameOver || expandedContinent === continent
                 return (
-                  <div key={continent} style={{ ...panelStyle, width: 160, flexShrink: 0, maxHeight: '100%', overflowY: 'auto' }}>
-                    <div
+                  <div key={continent}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedContinent((c) => (c === continent ? null : continent))}
                       style={{
-                        padding: '6px 10px',
-                        fontWeight: 700,
-                        color: '#0a1312',
-                        background: CONTINENT_COLOR[continent],
-                        position: 'sticky',
-                        top: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        width: '100%',
+                        padding: '8px 10px',
+                        border: 'none',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                        background: 'none',
+                        color: '#e3ece9',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
                       }}
                     >
-                      {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
-                    </div>
-                    {entries.map(({ name, isGuessed, territories }) => (
-                      <div key={name}>
-                        <div style={{ padding: '4px 10px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
-                        {territories.length > 0 && (
-                          <div
-                            style={{
-                              padding: '0 10px 4px 20px',
-                              fontSize: 11,
-                              lineHeight: 1.4,
-                              color: isGuessed ? 'rgba(74, 222, 128, 0.7)' : 'rgba(239, 68, 68, 0.7)',
-                            }}
-                          >
-                            {territories.join(', ')}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: CONTINENT_COLOR[continent], flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>
+                        {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
+                      </span>
+                      <span style={{ color: 'rgba(227, 236, 233, 0.5)' }}>{isOpen ? '▾' : '▸'}</span>
+                    </button>
+                    {isOpen &&
+                      entries.map(({ name, isGuessed, territories }) => (
+                        <div key={name}>
+                          <div style={{ padding: '4px 10px 4px 26px', color: isGuessed ? '#4ade80' : '#ef4444' }}>{name}</div>
+                          {territories.length > 0 && (
+                            <div
+                              style={{
+                                padding: '0 10px 4px 36px',
+                                fontSize: 11,
+                                lineHeight: 1.4,
+                                color: isGuessed ? 'rgba(74, 222, 128, 0.7)' : 'rgba(239, 68, 68, 0.7)',
+                              }}
+                            >
+                              {territories.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 )
               })}
