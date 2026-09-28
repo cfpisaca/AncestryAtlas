@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { geoArea, geoBounds } from 'd3'
+import { geoArea, geoBounds, geoCentroid } from 'd3'
 import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import Globe, { type GlobeInstance } from 'globe.gl'
 import { feature } from 'topojson-client'
@@ -55,6 +55,30 @@ export function altitudeForCountry(country: CountryFeature): number {
 function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
 }
+
+// Small enough, and isolated enough from any other landmass, that even
+// knowing roughly where to look on a whole-globe view doesn't help — unlike
+// e.g. Monaco or Vatican City, which are tiny too but sit right next to an
+// obvious, easy-to-find neighbor (France, Italy) that already gives away
+// their general location. These get a locator ring (below) so their
+// position is legible without needing to already know it. A curated list
+// rather than an area cutoff, since "hard to find" is really about
+// isolation, not just size — a small country embedded in a recognizable
+// region doesn't have the same problem a lone Pacific atoll does.
+const ISOLATED_MICRO_NATION_NAMES = [
+  'Nauru',
+  'Tuvalu',
+  'Kiribati',
+  'Palau',
+  'Marshall Islands',
+  'Federated States of Micronesia',
+  'Tonga',
+  'Maldives',
+  'Seychelles',
+  'Comoros',
+  'Cape Verde',
+  'São Tomé and Príncipe',
+]
 
 const EARTH_RADIUS_KM = 6371
 const FINE_CURVATURE_AREA_KM2 = 2000
@@ -270,6 +294,34 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to render world data')
     }
+  }, [countries])
+
+  // A gentle, always-on locator ping for the isolated micro-nations above —
+  // shared here rather than in either page individually, so both the free
+  // explorer and the quiz get it automatically from the one globe they
+  // already both build on. Deliberately slow and sparse (not the fast,
+  // attention-grabbing pulse a "you just guessed this" moment would want):
+  // this is permanent map furniture, meant to sit quietly until someone's
+  // actually looking for it, not compete with the auto-rotate or the
+  // missing-country hint dots for attention.
+  useEffect(() => {
+    const globe = globeRef.current
+    if (!globe || countries.length === 0) return
+    const points = ISOLATED_MICRO_NATION_NAMES.map((name) => countries.find((c) => c.properties.NAME === name))
+      .filter((c): c is CountryFeature => c != null)
+      .map((c) => {
+        const [lng, lat] = geoCentroid(c)
+        return { lat, lng }
+      })
+    globe
+      .ringsData(points)
+      .ringLat('lat')
+      .ringLng('lng')
+      .ringAltitude(0.01)
+      .ringColor(() => (t: number) => `rgba(255, 255, 255, ${0.5 * (1 - t)})`)
+      .ringMaxRadius(3.5)
+      .ringPropagationSpeed(0.6)
+      .ringRepeatPeriod(3800)
   }, [countries])
 
   const paintCountry = useCallback((name: string, color: Color) => {
