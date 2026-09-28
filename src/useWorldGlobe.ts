@@ -56,6 +56,13 @@ function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
 }
 
+function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 // Small enough, and isolated enough from any other landmass, that even
 // knowing roughly where to look on a whole-globe view doesn't help — unlike
 // e.g. Monaco or Vatican City, which are tiny too but sit right next to an
@@ -167,7 +174,20 @@ function paintRange(colorAttribute: BufferAttribute, range: VertexRange | undefi
 // merged world mesh, and exposes paintCountry so each mode can recolor
 // countries however its own game logic needs without knowing anything about
 // the underlying mesh/vertex-range plumbing.
-export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = {}) {
+export function useWorldGlobe({
+  autoRotate = true,
+  guessed,
+  isGameOver,
+  lastGuessed,
+}: {
+  autoRotate?: boolean
+  // Optional quiz state for the isolated-micro-nation locator rings below —
+  // undefined for callers that don't have a guessing game (the free
+  // explorer), which just keeps the neutral, uncolored pulse.
+  guessed?: Set<string>
+  isGameOver?: boolean
+  lastGuessed?: string | null
+} = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<GlobeInstance | null>(null)
   const worldGroupRef = useRef<Group | null>(null)
@@ -303,7 +323,10 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
   // attention-grabbing pulse a "you just guessed this" moment would want):
   // this is permanent map furniture, meant to sit quietly until someone's
   // actually looking for it, not compete with the auto-rotate or the
-  // missing-country hint dots for attention.
+  // missing-country hint dots for attention. Color reflects quiz state the
+  // same way everything else in WorldQuiz already does (green/red/gold) —
+  // for callers with no quiz state (the free explorer), guessed/isGameOver/
+  // lastGuessed are all undefined and every ring just stays neutral white.
   useEffect(() => {
     const globe = globeRef.current
     if (!globe || countries.length === 0) return
@@ -311,18 +334,21 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
       .filter((c): c is CountryFeature => c != null)
       .map((c) => {
         const [lng, lat] = geoCentroid(c)
-        return { lat, lng }
+        const name = c.properties.NAME
+        const baseColor =
+          name === lastGuessed ? HIGHLIGHT_COLOR : guessed?.has(name) ? '#4ade80' : isGameOver ? '#ef4444' : '#ffffff'
+        return { lat, lng, baseColor }
       })
     globe
       .ringsData(points)
       .ringLat('lat')
       .ringLng('lng')
       .ringAltitude(0.01)
-      .ringColor(() => (t: number) => `rgba(255, 255, 255, ${0.5 * (1 - t)})`)
+      .ringColor((d: object) => (t: number) => withAlpha((d as { baseColor: string }).baseColor, 0.5 * (1 - t)))
       .ringMaxRadius(3.5)
       .ringPropagationSpeed(0.6)
       .ringRepeatPeriod(3800)
-  }, [countries])
+  }, [countries, guessed, isGameOver, lastGuessed])
 
   const paintCountry = useCallback((name: string, color: Color) => {
     const layer = worldLayerRef.current

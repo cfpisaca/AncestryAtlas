@@ -53,8 +53,28 @@ function formatTime(totalSeconds: number): string {
 }
 
 function WorldQuiz() {
+  const [hasStarted, setHasStarted] = useState(false)
+  const [guessed, setGuessed] = useState<Set<string>>(new Set())
+  const [input, setInput] = useState('')
+  const [secondsLeft, setSecondsLeft] = useState(GAME_DURATION_SECONDS)
+  const [isPaused, setIsPaused] = useState(false)
+  const [hasGivenUp, setHasGivenUp] = useState(false)
+  const [showMissing, setShowMissing] = useState(false)
+  // Accordion: only one continent's list open at a time during play, so
+  // the sidebar never has to hold more than one continent's worth of
+  // country rows at once. At game over every continent opens regardless —
+  // see isOpen below — since the whole point of finishing is seeing the
+  // full reveal without clicking through each one.
+  const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
+  const [lastGuessed, setLastGuessed] = useState<string | null>(null)
+  const isGameOver = hasGivenUp || secondsLeft <= 0
+  const inputRef = useRef<HTMLInputElement>(null)
+
   const { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry } = useWorldGlobe({
     autoRotate: false,
+    guessed,
+    isGameOver,
+    lastGuessed,
   })
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
@@ -72,23 +92,6 @@ function WorldQuiz() {
     for (const country of countries) map.set(country.properties.NAME, geoCentroid(country))
     return map
   }, [countries])
-
-  const [hasStarted, setHasStarted] = useState(false)
-  const [guessed, setGuessed] = useState<Set<string>>(new Set())
-  const [input, setInput] = useState('')
-  const [secondsLeft, setSecondsLeft] = useState(GAME_DURATION_SECONDS)
-  const [isPaused, setIsPaused] = useState(false)
-  const [hasGivenUp, setHasGivenUp] = useState(false)
-  const [showMissing, setShowMissing] = useState(false)
-  // Accordion: only one continent's list open at a time during play, so
-  // the sidebar never has to hold more than one continent's worth of
-  // country rows at once. At game over every continent opens regardless —
-  // see isOpen below — since the whole point of finishing is seeing the
-  // full reveal without clicking through each one.
-  const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
-  const [lastGuessed, setLastGuessed] = useState<string | null>(null)
-  const isGameOver = hasGivenUp || secondsLeft <= 0
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!hasStarted || isPaused || isGameOver) return
