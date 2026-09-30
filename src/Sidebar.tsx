@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 // A fixed column next to the globe, not an overlay on top of it — every
 // control (picker, HUD, progress list) lives here instead of floating
@@ -29,7 +29,35 @@ export default function Sidebar({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const persistentRef = useRef<HTMLDivElement>(null)
+  const toggleStandaloneRef = useRef<HTMLDivElement>(null)
   const [persistentHeight, setPersistentHeight] = useState(0)
+
+  // This fixed bar sits directly above the globe's continuously-rendering
+  // WebGL canvas, and iOS Safari's compositor has a known failure mode
+  // where a layer like that goes blank — still fully present and still
+  // receiving taps, just not painted — under GPU pressure. One confirmed
+  // trigger (a per-guess geometry leak) is already fixed in
+  // useWorldGlobe.ts, but it kept recurring afterward, so there's
+  // apparently more than one way to trip this. Rather than keep chasing
+  // individual triggers one at a time, force a real repaint on a short
+  // timer: nudging a property WebKit can't skip repainting for
+  // invalidates a blanked layer's stale tile, so even if it goes blank
+  // again it never stays that way for more than about a second, instead
+  // of requiring a page refresh.
+  useEffect(() => {
+    const nudge = (el: HTMLElement | null) => {
+      if (!el) return
+      el.style.opacity = '0.999'
+      requestAnimationFrame(() => {
+        el.style.opacity = '1'
+      })
+    }
+    const interval = setInterval(() => {
+      nudge(persistentRef.current)
+      nudge(toggleStandaloneRef.current)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // The persistent bar is `position: fixed` on mobile, so the scrollable
   // drawer content below it needs matching top padding or its own content
@@ -112,7 +140,11 @@ export default function Sidebar({
             {persistent(<div className="sidebar-persistent-toggle">{toggleButtonEl}</div>)}
           </div>
         ) : (
-          !isOpen && <div className="sidebar-toggle-standalone">{toggleButtonEl}</div>
+          !isOpen && (
+            <div ref={toggleStandaloneRef} className="sidebar-toggle-standalone">
+              {toggleButtonEl}
+            </div>
+          )
         )}
         {children}
       </aside>
