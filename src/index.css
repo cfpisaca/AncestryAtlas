@@ -78,9 +78,6 @@ body {
     left: 0;
     right: 0;
     z-index: 32;
-    padding: 12px 16px;
-    background: rgba(10, 19, 18, 0.97);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     /* A translucent fixed layer sitting above a continuously-rendering
        WebGL canvas is exactly the case where iOS Safari's compositor can
        blank a layer's paint while leaving it in place and interactive —
@@ -136,6 +133,19 @@ body {
     top: var(--visual-viewport-offset-top, 0px);
     transform: translateZ(0);
   }
+}
+
+/* Always applied, mobile and desktop alike — only the *floating* look
+   (position: fixed, the GPU-layer promotion) is mobile-only, inside the
+   media query above, where this needs to actually sit on top of the
+   closable drawer rather than just visually lead it. Without this base
+   rule, outside that media query .sidebar-persistent had no padding or
+   background of its own at all, so its content rendered flush against the
+   window edge instead of matching .sidebar's own 16px inset below it. */
+.sidebar-persistent {
+  padding: 12px 16px;
+  background: rgba(10, 19, 18, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 /* Desktop/tablet only in practice — the mobile override below replaces
