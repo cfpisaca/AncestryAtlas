@@ -7,6 +7,7 @@ import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
 import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { useVisibleViewportHeight } from './useVisibleViewportHeight'
 
 const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
@@ -69,6 +70,7 @@ function WorldQuiz() {
   const [lastGuessed, setLastGuessed] = useState<string | null>(null)
   const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
+  const visibleHeight = useVisibleViewportHeight()
 
   const { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry } = useWorldGlobe({
     autoRotate: false,
@@ -272,7 +274,7 @@ function WorldQuiz() {
   const isInputDisabled = !hasStarted || isPaused || isGameOver
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+    <div style={{ width: '100vw', height: visibleHeight, display: 'flex' }}>
       <Sidebar
         persistent={(toggle) => (
           <>

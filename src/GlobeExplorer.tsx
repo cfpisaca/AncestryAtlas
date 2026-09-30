@@ -7,11 +7,13 @@ import CountryPicker from './CountryPicker'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
 import { altitudeForCountry, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { useVisibleViewportHeight } from './useVisibleViewportHeight'
 
 const SELECTED_COLOR = new Color('#f2b134')
 
 function GlobeExplorer() {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe()
+  const visibleHeight = useVisibleViewportHeight()
   const [selectedName, setSelectedName] = useState('')
   const previousSelectedRef = useRef('')
 
@@ -62,7 +64,7 @@ function GlobeExplorer() {
   }
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+    <div style={{ width: '100vw', height: visibleHeight, display: 'flex' }}>
       <Sidebar>
         <CountryPicker
           countryNamesByContinent={countryNamesByContinent}

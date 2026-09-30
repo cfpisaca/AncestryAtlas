@@ -231,13 +231,19 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
 
     globeRef.current = globe
 
-    const handleResize = () => {
+    // A ResizeObserver on the container itself, rather than a `window`
+    // resize listener — it catches every reason the container's actual
+    // rendered size can change (window resize, the mobile drawer opening,
+    // and critically the container shrinking to stay above the on-screen
+    // keyboard — see useVisibleViewportHeight), where a `window` listener
+    // only catches the first of those.
+    const resizeObserver = new ResizeObserver(() => {
       globe.width(container.clientWidth).height(container.clientHeight)
-    }
-    window.addEventListener('resize', handleResize)
+    })
+    resizeObserver.observe(container)
 
     return () => {
-      window.removeEventListener('resize', handleResize)
+      resizeObserver.disconnect()
       globe._destructor()
       globeRef.current = null
     }
