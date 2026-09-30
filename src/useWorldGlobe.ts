@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { geoArea, geoBounds, geoCentroid } from 'd3'
+import { geoArea, geoBounds } from 'd3'
 import type { Feature, MultiPolygon, Polygon, Position } from 'geojson'
 import Globe, { type GlobeInstance } from 'globe.gl'
 import { feature } from 'topojson-client'
@@ -55,37 +55,6 @@ export function altitudeForCountry(country: CountryFeature): number {
 function ringsOf(geometry: Polygon | MultiPolygon): Position[][][] {
   return geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates
 }
-
-function withAlpha(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-// Small enough, and isolated enough from any other landmass, that even
-// knowing roughly where to look on a whole-globe view doesn't help — unlike
-// e.g. Monaco or Vatican City, which are tiny too but sit right next to an
-// obvious, easy-to-find neighbor (France, Italy) that already gives away
-// their general location. These get a locator ring (below) so their
-// position is legible without needing to already know it. A curated list
-// rather than an area cutoff, since "hard to find" is really about
-// isolation, not just size — a small country embedded in a recognizable
-// region doesn't have the same problem a lone Pacific atoll does.
-const ISOLATED_MICRO_NATION_NAMES = [
-  'Nauru',
-  'Tuvalu',
-  'Kiribati',
-  'Palau',
-  'Marshall Islands',
-  'Federated States of Micronesia',
-  'Tonga',
-  'Maldives',
-  'Seychelles',
-  'Comoros',
-  'Cape Verde',
-  'São Tomé and Príncipe',
-]
 
 const EARTH_RADIUS_KM = 6371
 const FINE_CURVATURE_AREA_KM2 = 2000
@@ -174,20 +143,7 @@ function paintRange(colorAttribute: BufferAttribute, range: VertexRange | undefi
 // merged world mesh, and exposes paintCountry so each mode can recolor
 // countries however its own game logic needs without knowing anything about
 // the underlying mesh/vertex-range plumbing.
-export function useWorldGlobe({
-  autoRotate = true,
-  guessed,
-  isGameOver,
-  lastGuessed,
-}: {
-  autoRotate?: boolean
-  // Optional quiz state for the isolated-micro-nation locator rings below —
-  // undefined for callers that don't have a guessing game (the free
-  // explorer), which just keeps the neutral, uncolored pulse.
-  guessed?: Set<string>
-  isGameOver?: boolean
-  lastGuessed?: string | null
-} = {}) {
+export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = {}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const globeRef = useRef<GlobeInstance | null>(null)
   const worldGroupRef = useRef<Group | null>(null)
@@ -315,40 +271,6 @@ export function useWorldGlobe({
       setLoadError(err instanceof Error ? err.message : 'Failed to render world data')
     }
   }, [countries])
-
-  // A gentle, always-on locator ping for the isolated micro-nations above —
-  // shared here rather than in either page individually, so both the free
-  // explorer and the quiz get it automatically from the one globe they
-  // already both build on. Deliberately slow and sparse (not the fast,
-  // attention-grabbing pulse a "you just guessed this" moment would want):
-  // this is permanent map furniture, meant to sit quietly until someone's
-  // actually looking for it, not compete with the auto-rotate or the
-  // missing-country hint dots for attention. Color reflects quiz state the
-  // same way everything else in WorldQuiz already does (green/red/gold) —
-  // for callers with no quiz state (the free explorer), guessed/isGameOver/
-  // lastGuessed are all undefined and every ring just stays neutral white.
-  useEffect(() => {
-    const globe = globeRef.current
-    if (!globe || countries.length === 0) return
-    const points = ISOLATED_MICRO_NATION_NAMES.map((name) => countries.find((c) => c.properties.NAME === name))
-      .filter((c): c is CountryFeature => c != null)
-      .map((c) => {
-        const [lng, lat] = geoCentroid(c)
-        const name = c.properties.NAME
-        const baseColor =
-          name === lastGuessed ? HIGHLIGHT_COLOR : guessed?.has(name) ? '#4ade80' : isGameOver ? '#ef4444' : '#ffffff'
-        return { lat, lng, baseColor }
-      })
-    globe
-      .ringsData(points)
-      .ringLat('lat')
-      .ringLng('lng')
-      .ringAltitude(0.01)
-      .ringColor((d: object) => (t: number) => withAlpha((d as { baseColor: string }).baseColor, 0.5 * (1 - t)))
-      .ringMaxRadius(3.5)
-      .ringPropagationSpeed(0.6)
-      .ringRepeatPeriod(3800)
-  }, [countries, guessed, isGameOver, lastGuessed])
 
   const paintCountry = useCallback((name: string, color: Color) => {
     const layer = worldLayerRef.current

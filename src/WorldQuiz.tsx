@@ -72,9 +72,6 @@ function WorldQuiz() {
 
   const { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry } = useWorldGlobe({
     autoRotate: false,
-    guessed,
-    isGameOver,
-    lastGuessed,
   })
 
   // Sovereign countries only, matching the ~196 commonly cited world total —
