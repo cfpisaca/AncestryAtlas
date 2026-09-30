@@ -268,9 +268,16 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
       setWorldReady(true)
       // Only relevant on retry (a second successful fetch after a first
       // failure): removes the previous mesh instead of leaving it layered
-      // underneath a newly-built one.
+      // underneath a newly-built one, and frees its GPU buffers rather than
+      // just detaching them (see the same fix in highlightCountry above).
       return () => {
         worldGroup.remove(group)
+        for (const child of group.children) {
+          if (child instanceof Mesh || child instanceof LineSegments) {
+            child.geometry.dispose()
+            if (!Array.isArray(child.material) && child.material !== BORDER_MATERIAL) child.material.dispose()
+          }
+        }
         worldLayerRef.current = null
       }
     } catch (err) {
@@ -297,6 +304,16 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     if (!worldGroup) return
     if (highlightRef.current) {
       worldGroup.remove(highlightRef.current)
+      // `remove` only drops it from the scene graph — it doesn't free the
+      // GPU buffers a LineSegments' geometry holds. Since this runs on
+      // every single guess, skipping this leaked a little more VRAM each
+      // time, and enough of that pressure is a known trigger for iOS
+      // Safari's compositor to blank out an unrelated layer (the sidebar's
+      // translucent fixed overlay) while leaving it fully present and
+      // interactive underneath — it doesn't disappear, it just stops being
+      // painted. HIGHLIGHT_MATERIAL is shared across every call, so only
+      // the geometry (freshly merged per call) needs disposing.
+      highlightRef.current.geometry.dispose()
       highlightRef.current = null
     }
     if (!country || !globe) return

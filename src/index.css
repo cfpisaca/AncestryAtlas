@@ -76,6 +76,14 @@ body {
     padding: 12px 16px;
     background: rgba(10, 19, 18, 0.97);
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    /* A translucent fixed layer sitting above a continuously-rendering
+       WebGL canvas is exactly the case where iOS Safari's compositor can
+       blank a layer's paint while leaving it in place and interactive —
+       it looks gone but still eats taps at the same spot. Forcing this
+       onto its own stable GPU layer is the standard mitigation (on top of
+       the real fix: useWorldGlobe.ts no longer leaks GPU memory into that
+       same compositor on every guess). */
+    transform: translateZ(0);
   }
   .sidebar-persistent-toggle,
   .sidebar-toggle-standalone {
@@ -86,6 +94,7 @@ body {
     top: calc(var(--visual-viewport-offset-top, 0px) + 12px);
     left: 12px;
     z-index: 31;
+    transform: translateZ(0);
   }
   .sidebar-backdrop.sidebar-open {
     display: block;
@@ -120,6 +129,7 @@ body {
 @media (max-width: 768px), (max-height: 500px) {
   .sidebar-backdrop {
     top: var(--visual-viewport-offset-top, 0px);
+    transform: translateZ(0);
   }
 }
 
