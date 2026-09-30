@@ -6,7 +6,7 @@ import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe, type CountryFeature } from './useWorldGlobe'
 import { useVisibleViewportHeight } from './useVisibleViewportHeight'
 
 const GUESSED_COLOR = new Color('#4ade80')
@@ -184,7 +184,8 @@ function WorldQuiz() {
     // part of the US's polygon), so guessing the parent has to explicitly
     // paint each one too, or they'd sit there in the default land color
     // forever, looking unrelated to the country that owns them.
-    for (const territory of TERRITORIES_BY_COUNTRY[match] ?? []) paintCountry(territory, GUESSED_COLOR)
+    const territoryNames = TERRITORIES_BY_COUNTRY[match] ?? []
+    for (const territory of territoryNames) paintCountry(territory, GUESSED_COLOR)
     // Jump the accordion to whichever continent that guess just landed in,
     // so the country you just got is immediately visible instead of
     // requiring a manual click over to its tab.
@@ -195,7 +196,14 @@ function WorldQuiz() {
       const [lng, lat] = geoCentroid(country)
       globe.pointOfView({ lat, lng, altitude: altitudeForCountry(country) }, 1200)
     }
-    highlightCountry(country ?? null)
+    // The highlight ring needs to trace every territory too, the same way
+    // the fill color above does — otherwise a country like France reads as
+    // only partly "just guessed", with French Guiana sitting there
+    // green-filled but ringless.
+    const territoryFeatures = territoryNames
+      .map((name) => countryByName.get(name))
+      .filter((feature): feature is CountryFeature => feature !== undefined)
+    highlightCountry(country ? [country, ...territoryFeatures] : territoryFeatures)
     setInput('')
   }
 

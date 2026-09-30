@@ -293,12 +293,17 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
 
   const highlightRef = useRef<LineSegments | null>(null)
 
-  // Draws a bright ring around one country's actual coastline, on top of
-  // both the land cap and the ordinary border layer — used to call out
-  // e.g. "the country you just guessed" distinctly from a same-colored fill
-  // alone. Passing null clears it. Only ever one highlight at a time: the
-  // previous ring is removed before (or instead of) adding a new one.
-  const highlightCountry = useCallback((country: CountryFeature | null) => {
+  // Draws a bright ring around one or more countries' actual coastlines, on
+  // top of both the land cap and the ordinary border layer — used to call
+  // out e.g. "the country you just guessed" distinctly from a same-colored
+  // fill alone. Takes an array (not just the one guessed country) so a
+  // territory like French Guiana can be traced along with France itself —
+  // it's guessed-and-painted alongside its parent (see TERRITORIES_BY_
+  // COUNTRY in WorldQuiz.tsx) but is its own separate landmass on the map,
+  // so it needs its own ring, not just France's. Passing null (or [])
+  // clears it. Only ever one combined highlight at a time: the previous
+  // ring(s) are removed before (or instead of) adding new ones.
+  const highlightCountry = useCallback((countries: CountryFeature[] | null) => {
     const worldGroup = worldGroupRef.current
     const globe = globeRef.current
     if (!worldGroup) return
@@ -316,7 +321,7 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
       highlightRef.current.geometry.dispose()
       highlightRef.current = null
     }
-    if (!country || !globe) return
+    if (!countries || countries.length === 0 || !globe) return
     const radius = globe.getGlobeRadius()
     // Only double the ordinary border's own tiny offset (0.00002), not the
     // 0.0006 this briefly used — that's small at a continental zoom, but
@@ -327,8 +332,10 @@ export function useWorldGlobe({ autoRotate = true }: { autoRotate?: boolean } = 
     // off the real coastline instead of tracing it, worse the smaller and
     // closer-zoomed the country is.
     const highlightRadius = radius * (1 + POLYGON_ALTITUDE + 0.00004)
-    const geometries = ringsOf(country.geometry).map(
-      (ring) => new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, highlightRadius, curvatureResolutionFor(ring)),
+    const geometries = countries.flatMap((country) =>
+      ringsOf(country.geometry).map(
+        (ring) => new GeoJsonGeometry({ type: 'Polygon', coordinates: ring }, highlightRadius, curvatureResolutionFor(ring)),
+      ),
     )
     const line = new LineSegments(mergeGeometries(geometries, false), HIGHLIGHT_MATERIAL)
     worldGroup.add(line)
