@@ -33,7 +33,13 @@ body {
 @media (max-width: 768px) {
   .sidebar {
     position: fixed;
-    top: 0;
+    /* Normally 0, but iOS pans the visual viewport (without scrolling the
+       document — see useVisibleViewportHeight.ts) to keep a focused input
+       clear of the keyboard. `position: fixed` tracks the layout viewport,
+       not that pan, so without this the drawer (and everything below it in
+       this file) would end up pinned above where the screen actually
+       starts. */
+    top: var(--visual-viewport-offset-top, 0px);
     left: -100vw;
     z-index: 30;
     width: min(320px, 85vw) !important;
@@ -55,7 +61,7 @@ body {
   }
   .sidebar-persistent {
     position: fixed;
-    top: 0;
+    top: var(--visual-viewport-offset-top, 0px);
     left: 0;
     right: 0;
     z-index: 32;
@@ -69,7 +75,7 @@ body {
   }
   .sidebar-toggle-standalone {
     position: fixed;
-    top: 12px;
+    top: calc(var(--visual-viewport-offset-top, 0px) + 12px);
     left: 12px;
     z-index: 31;
   }
@@ -99,6 +105,14 @@ body {
   background: rgba(0, 0, 0, 0.5);
   border: none;
   padding: 0;
+}
+
+/* Same visual-viewport pan compensation as the drawer chrome above — placed
+   here (after the base rule) so it wins the cascade at equal specificity. */
+@media (max-width: 768px) {
+  .sidebar-backdrop {
+    top: var(--visual-viewport-offset-top, 0px);
+  }
 }
 
 /* Thin, dark scrollbar for the sidebar instead of the default OS one (most
