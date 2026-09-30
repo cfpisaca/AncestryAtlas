@@ -68,7 +68,6 @@ function WorldQuiz() {
   // full reveal without clicking through each one.
   const [expandedContinent, setExpandedContinent] = useState<Continent | null>(null)
   const [lastGuessed, setLastGuessed] = useState<string | null>(null)
-  const isGameOver = hasGivenUp || secondsLeft <= 0
   const inputRef = useRef<HTMLInputElement>(null)
   const visibleHeight = useVisibleViewportHeight()
 
@@ -84,6 +83,12 @@ function WorldQuiz() {
     () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
     [countries],
   )
+  // The `guessed.size > 0` guard isn't a rounding nicety — guessableNames is
+  // still `[]` on the very first render, before the country data has
+  // loaded, and `0 === 0` would otherwise read as "complete" before the
+  // game has even begun.
+  const isComplete = guessed.size > 0 && guessed.size === guessableNames.length
+  const isGameOver = hasGivenUp || secondsLeft <= 0 || isComplete
   const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
   const countryByName = useMemo(() => new Map(countries.map((c) => [c.properties.NAME, c])), [countries])
   const centroidByName = useMemo(() => {
@@ -287,8 +292,8 @@ function WorldQuiz() {
         persistent={(toggle) => (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 24, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
-                {formatTime(secondsLeft)}
+              <span style={{ fontSize: isComplete ? 16 : 24, fontWeight: 700, color: isComplete ? HIGHLIGHT_COLOR : secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
+                {isComplete ? `🎉 Complete in ${formatTime(GAME_DURATION_SECONDS - secondsLeft)}` : formatTime(secondsLeft)}
               </span>
               {hasStarted && (
                 <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
@@ -367,6 +372,22 @@ function WorldQuiz() {
         )}
       >
         <>
+          {isComplete && (
+            <div
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: `1px solid ${HIGHLIGHT_COLOR}66`,
+                background: `${HIGHLIGHT_COLOR}1f`,
+                color: HIGHLIGHT_COLOR,
+                fontSize: 13,
+                fontWeight: 600,
+                textAlign: 'center',
+              }}
+            >
+              🎉 All {guessableNames.length} countries guessed with {formatTime(secondsLeft)} to spare!
+            </div>
+          )}
           {hasStarted && (
             <div style={{ display: 'flex', gap: 8 }}>
               {!isGameOver && (
