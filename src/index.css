@@ -19,3 +19,109 @@ body {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
 }
+
+/* Sidebar (see Sidebar.tsx): a normal flex column next to the globe on
+   anything wide enough to fit it (desktop, tablets), same as always. Below
+   this width there's no room for both, so it becomes a slide-out drawer
+   instead — closed by default so the globe is what you see first, opened
+   via the toggle button. Media queries do this rather than a JS viewport
+   check so it responds instantly on rotation/resize with no extra state.
+   Animates via `left`, not `transform` — a transform on this element would
+   give its .sidebar-persistent child (position: fixed) a new containing
+   block, pinning it to *this* element instead of the viewport and dragging
+   it along with the drawer, defeating the entire point of it staying put. */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -100vw;
+    z-index: 30;
+    width: min(320px, 85vw) !important;
+    transition: left 0.25s ease;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .sidebar.sidebar-open {
+    left: 0;
+  }
+  /* Reserves space at the top of the drawer's own scroll area so its other
+     content doesn't render underneath the fixed persistent bar sitting on
+     top of it. The value comes from Sidebar.tsx measuring the bar's real
+     height (it changes once the quiz starts and the guess input appears) —
+     the 90px fallback only covers the first frame before that measurement
+     lands. The +12px is breathing room so the first button row doesn't sit
+     flush against the bar's bottom edge. */
+  .sidebar.sidebar-has-persistent {
+    padding-top: calc(var(--sidebar-persistent-height, 90px) + 12px) !important;
+  }
+  .sidebar-persistent {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 32;
+    padding: 12px 16px;
+    background: rgba(10, 19, 18, 0.97);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .sidebar-persistent-toggle,
+  .sidebar-toggle-standalone {
+    display: block !important;
+  }
+  .sidebar-toggle-standalone {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 31;
+  }
+  .sidebar-backdrop.sidebar-open {
+    display: block;
+  }
+  /* iOS Safari auto-zooms the whole page on focus for any text input under
+     16px, which would yank the globe view in and out every time someone
+     taps in to guess. The persistent bar already sits at the very top of
+     the screen specifically so the keyboard (which opens from the bottom)
+     never covers it — this just stops the zoom from undoing that. */
+  .quiz-guess-input {
+    font-size: 16px !important;
+  }
+}
+
+.sidebar-persistent-toggle,
+.sidebar-toggle-standalone {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  padding: 0;
+}
+
+/* Thin, dark scrollbar for the sidebar instead of the default OS one (most
+   visible on macOS with "Show scroll bars: Always" set, where it otherwise
+   renders as a wide light-gray track that clashes with the dark theme). */
+.sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}

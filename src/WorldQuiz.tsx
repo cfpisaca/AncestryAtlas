@@ -276,95 +276,108 @@ function WorldQuiz() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
-      <Sidebar>
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 24, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
-              {formatTime(secondsLeft)}
-            </span>
-            {hasStarted ? (
-              <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
-                {guessed.size} / {guessableNames.length} guessed
+      <Sidebar
+        persistent={(toggle) => (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 24, fontWeight: 700, color: secondsLeft <= 30 ? '#ef4444' : '#4ade80' }}>
+                {formatTime(secondsLeft)}
               </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setHasStarted(true)}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 6,
-                  border: 'none',
-                  background: '#4ade80',
-                  color: '#0a1312',
-                  fontWeight: 700,
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                }}
-              >
-                Start Quiz ▶
-              </button>
-            )}
-          </div>
+              {hasStarted && (
+                <span style={{ fontSize: 13, color: 'rgba(227, 236, 233, 0.7)' }}>
+                  {guessed.size} / {guessableNames.length} guessed
+                </span>
+              )}
+            </div>
 
-          {hasStarted && (
-            <>
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(event) => handleInputChange(event.target.value)}
-                disabled={isInputDisabled}
-                placeholder="Enter country's name here:"
-                autoFocus
-                style={{
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
-                  color: '#e3ece9',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
-                  outline: 'none',
-                }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                {!isGameOver && (
-                  <button
-                    type="button"
-                    onClick={() => setIsPaused((p) => !p)}
-                    style={{
-                      flex: 1,
-                      padding: '6px 10px',
-                      borderRadius: 6,
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      color: '#e3ece9',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {isPaused ? 'Resume' : 'Pause'}
-                  </button>
-                )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {hasStarted ? (
+                <input
+                  ref={inputRef}
+                  type="text"
+                  className="quiz-guess-input"
+                  value={input}
+                  onChange={(event) => handleInputChange(event.target.value)}
+                  disabled={isInputDisabled}
+                  placeholder="Enter country's name here:"
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    height: 36,
+                    boxSizing: 'border-box',
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: isInputDisabled ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.1)',
+                    color: '#e3ece9',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+              ) : (
                 <button
                   type="button"
-                  onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
+                  onClick={() => setHasStarted(true)}
+                  style={{
+                    flex: 1,
+                    height: 36,
+                    boxSizing: 'border-box',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#4ade80',
+                    color: '#0a1312',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Start Quiz ▶
+                </button>
+              )}
+              {toggle}
+            </div>
+          </>
+        )}
+      >
+        <>
+          {hasStarted && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {!isGameOver && (
+                <button
+                  type="button"
+                  onClick={() => setIsPaused((p) => !p)}
                   style={{
                     flex: 1,
                     padding: '6px 10px',
                     borderRadius: 6,
-                    border: 'none',
-                    background: '#ef4444',
-                    color: '#fff',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#e3ece9',
                     cursor: 'pointer',
                   }}
                 >
-                  {isGameOver ? 'Play Again' : 'Give Up?'}
+                  {isPaused ? 'Resume' : 'Pause'}
                 </button>
-              </div>
-            </>
+              )}
+              <button
+                type="button"
+                onClick={() => (isGameOver ? restart() : setHasGivenUp(true))}
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                {isGameOver ? 'Play Again' : 'Give Up?'}
+              </button>
+            </div>
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
