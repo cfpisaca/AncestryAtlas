@@ -298,6 +298,18 @@ function WorldQuiz() {
                   disabled={isInputDisabled}
                   placeholder="Enter country's name here:"
                   autoFocus
+                  // This is a guessing game, not a form — none of these fields
+                  // have anything to do with a saved password, address, or
+                  // payment method, but Safari/Chrome's autofill heuristics
+                  // don't know that from a bare <input type="text">, so they
+                  // offer Keychain/Wallet/address suggestions anyway. These
+                  // are the standard attributes for opting a field out of
+                  // that guesswork; autoComplete="off" alone is routinely
+                  // ignored by Safari for text inputs, hence all four.
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   style={{
                     flex: 1,
                     minWidth: 0,
