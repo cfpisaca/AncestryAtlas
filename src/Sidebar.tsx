@@ -9,12 +9,20 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 //
 // `persistent` is the one exception: content passed there (WorldQuiz's
 // timer + guess input) stays reachable even while the drawer is closed,
-// since closing it shouldn't mean you can't keep playing. It escapes the
-// drawer via its own `position: fixed` — which only works because the
-// drawer's own open/close animation uses the `left` property rather than
-// `transform` (a `transform` on an ancestor creates a new containing block
-// for `position: fixed` descendants, pinning them to *that* element instead
-// of the viewport, which would just drag this along with the drawer).
+// since closing it shouldn't mean you can't keep playing. It's rendered as
+// a sibling of <aside>, not a child of it, even though visually it sits
+// right on top of the drawer — nesting a `position: fixed` element inside
+// another `position: fixed` element that also scrolls (<aside> is both:
+// see its own `overflow-y: auto`) is a known trouble spot on iOS Safari,
+// where the descendant's fixed positioning can get computed relative to
+// that scrolling ancestor instead of the true viewport. It doesn't happen
+// every time, which is exactly what made it hard to pin down — sometimes
+// the bar would render fine, sometimes it'd end up confined to the
+// drawer's own width/position instead of spanning the full screen (visible
+// as "the bar disappeared" whenever that coincided with the drawer being
+// closed off-screen). Being a plain sibling instead of a nested descendant
+// sidesteps the whole class of bug rather than trying to out-guess when it
+// triggers.
 //
 // It's a render prop (not a plain node) so the caller can place the open/
 // close toggle wherever makes sense in its own layout (e.g. inline next to
@@ -32,18 +40,12 @@ export default function Sidebar({
   const toggleStandaloneRef = useRef<HTMLDivElement>(null)
   const [persistentHeight, setPersistentHeight] = useState(0)
 
-  // This fixed bar sits directly above the globe's continuously-rendering
-  // WebGL canvas, and iOS Safari's compositor has a known failure mode
-  // where a layer like that goes blank — still fully present and still
-  // receiving taps, just not painted — under GPU pressure. One confirmed
-  // trigger (a per-guess geometry leak) is already fixed in
-  // useWorldGlobe.ts, but it kept recurring afterward, so there's
-  // apparently more than one way to trip this. Rather than keep chasing
-  // individual triggers one at a time, force a real repaint on a short
-  // timer: nudging a property WebKit can't skip repainting for
-  // invalidates a blanked layer's stale tile, so even if it goes blank
-  // again it never stays that way for more than about a second, instead
-  // of requiring a page refresh.
+  // Belt-and-suspenders on top of the sibling-not-child fix above: this
+  // fixed bar sits directly above the globe's continuously-rendering WebGL
+  // canvas, which is separately a known spot for iOS Safari's compositor to
+  // blank a layer's paint — still fully present and still receiving taps,
+  // just not painted. A periodic, imperceptible repaint nudge means even if
+  // that happens, it can't stay that way for more than about a second.
   useEffect(() => {
     const nudge = (el: HTMLElement | null) => {
       if (!el) return
@@ -113,6 +115,11 @@ export default function Sidebar({
         onClick={() => setIsOpen(false)}
         aria-label="Close menu"
       />
+      {persistent && (
+        <div ref={persistentRef} className="sidebar-persistent" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {persistent(<div className="sidebar-persistent-toggle">{toggleButtonEl}</div>)}
+        </div>
+      )}
       <aside
         className={`sidebar${isOpen ? ' sidebar-open' : ''}${persistent ? ' sidebar-has-persistent' : ''}`}
         style={{
@@ -135,16 +142,10 @@ export default function Sidebar({
             : {}),
         }}
       >
-        {persistent ? (
-          <div ref={persistentRef} className="sidebar-persistent" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {persistent(<div className="sidebar-persistent-toggle">{toggleButtonEl}</div>)}
+        {!persistent && !isOpen && (
+          <div ref={toggleStandaloneRef} className="sidebar-toggle-standalone">
+            {toggleButtonEl}
           </div>
-        ) : (
-          !isOpen && (
-            <div ref={toggleStandaloneRef} className="sidebar-toggle-standalone">
-              {toggleButtonEl}
-            </div>
-          )
         )}
         {children}
       </aside>
