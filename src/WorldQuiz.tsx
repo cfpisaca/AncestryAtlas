@@ -296,7 +296,7 @@ function WorldQuiz() {
                   value={input}
                   onChange={(event) => handleInputChange(event.target.value)}
                   disabled={isInputDisabled}
-                  placeholder="Enter country's name here:"
+                  placeholder="Type your guess..."
                   autoFocus
                   // This is a guessing game, not a form — none of these fields
                   // have anything to do with a saved password, address, or
@@ -305,7 +305,12 @@ function WorldQuiz() {
                   // offer Keychain/Wallet/address suggestions anyway. These
                   // are the standard attributes for opting a field out of
                   // that guesswork; autoComplete="off" alone is routinely
-                  // ignored by Safari for text inputs, hence all four.
+                  // ignored by Safari for text inputs, hence all four — and
+                  // Safari's heuristic also keys off the placeholder text
+                  // itself, which is why this doesn't say "country" or
+                  // "name" anymore (it was reading as an address form's
+                  // country field, hence the "United States (Home)"
+                  // contact-card suggestion).
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
