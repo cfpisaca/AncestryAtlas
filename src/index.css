@@ -41,6 +41,11 @@ body {
 @media (max-width: 768px), (max-height: 500px) {
   .sidebar {
     position: fixed;
+    /* No longer set via the `height: 100%` inline style (that's now
+       `flex: 1 1 auto` instead, for the desktop column) — needed explicitly
+       here since `position: fixed` takes this out of flex layout, so
+       flex-basis no longer produces an actual height. */
+    height: 100%;
     /* Normally 0, but iOS pans the visual viewport (without scrolling the
        document — see useVisibleViewportHeight.ts) to keep a focused input
        clear of the keyboard. `position: fixed` tracks the layout viewport,
@@ -130,6 +135,31 @@ body {
   .sidebar-backdrop {
     top: var(--visual-viewport-offset-top, 0px);
     transform: translateZ(0);
+  }
+}
+
+/* Desktop/tablet only in practice — the mobile override below replaces
+   this with `display: contents` (see Sidebar.tsx for why). Gives the
+   persistent bar and the drawer a shared width and stacks them, since
+   neither one imposes its own width once the drawer stops being a
+   `position: fixed` overlay outside that media query. */
+.sidebar-column {
+  width: clamp(260px, 26vw, 340px);
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Same reasoning as the two overrides above — placed after the base rule
+   so it wins the cascade at equal specificity. On mobile, neither of
+   .sidebar-column's children is laid out by it at all (both are
+   `position: fixed`), so this removes the wrapper from the box tree
+   entirely rather than let it sit there as an inert, oddly-sized flex item
+   stealing width from the globe. */
+@media (max-width: 768px), (max-height: 500px) {
+  .sidebar-column {
+    display: contents;
   }
 }
 

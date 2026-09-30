@@ -24,6 +24,18 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 // sidesteps the whole class of bug rather than trying to out-guess when it
 // triggers.
 //
+// The `.sidebar-column` wrapper around both of them exists purely for
+// desktop/tablet, where neither element is `position: fixed` at all (the
+// sidebar isn't a drawer there — it's always on screen) and the persistent
+// bar needs to visually dock above it, matching its width, the way it did
+// before this file cared about the mobile bug above. On mobile, that same
+// wrapper is `display: contents` (see index.css) — it stops generating a
+// box at all, so .sidebar-persistent and <aside> fall straight through to
+// being direct flex children of WorldQuiz's own layout, i.e. still plain
+// siblings for the purposes of the fixed-positioning fix above. Same DOM,
+// two completely different visual roles depending on viewport, with no JS
+// breakpoint check needed.
+//
 // It's a render prop (not a plain node) so the caller can place the open/
 // close toggle wherever makes sense in its own layout (e.g. inline next to
 // an input, matching its height) instead of Sidebar bolting it on beside
@@ -115,40 +127,42 @@ export default function Sidebar({
         onClick={() => setIsOpen(false)}
         aria-label="Close menu"
       />
-      {persistent && (
-        <div ref={persistentRef} className="sidebar-persistent" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {persistent(<div className="sidebar-persistent-toggle">{toggleButtonEl}</div>)}
-        </div>
-      )}
-      <aside
-        className={`sidebar${isOpen ? ' sidebar-open' : ''}${persistent ? ' sidebar-has-persistent' : ''}`}
-        style={{
-          width: 'clamp(260px, 26vw, 340px)',
-          flexShrink: 0,
-          height: '100%',
-          overflowY: 'auto',
-          boxSizing: 'border-box',
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          background: 'rgba(10, 19, 18, 0.92)',
-          borderRight: '1px solid rgba(255, 255, 255, 0.12)',
-          color: '#e3ece9',
-          fontFamily: 'system-ui, sans-serif',
-          fontSize: 14,
-          ...(persistentHeight > 0
-            ? ({ '--sidebar-persistent-height': `${persistentHeight}px` } as React.CSSProperties)
-            : {}),
-        }}
-      >
-        {!persistent && !isOpen && (
-          <div ref={toggleStandaloneRef} className="sidebar-toggle-standalone">
-            {toggleButtonEl}
+      <div className="sidebar-column">
+        {persistent && (
+          <div ref={persistentRef} className="sidebar-persistent" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {persistent(<div className="sidebar-persistent-toggle">{toggleButtonEl}</div>)}
           </div>
         )}
-        {children}
-      </aside>
+        <aside
+          className={`sidebar${isOpen ? ' sidebar-open' : ''}${persistent ? ' sidebar-has-persistent' : ''}`}
+          style={{
+            width: '100%',
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+            background: 'rgba(10, 19, 18, 0.92)',
+            borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+            color: '#e3ece9',
+            fontFamily: 'system-ui, sans-serif',
+            fontSize: 14,
+            ...(persistentHeight > 0
+              ? ({ '--sidebar-persistent-height': `${persistentHeight}px` } as React.CSSProperties)
+              : {}),
+          }}
+        >
+          {!persistent && !isOpen && (
+            <div ref={toggleStandaloneRef} className="sidebar-toggle-standalone">
+              {toggleButtonEl}
+            </div>
+          )}
+          {children}
+        </aside>
+      </div>
     </>
   )
 }
