@@ -29,8 +29,16 @@ body {
    Animates via `left`, not `transform` — a transform on this element would
    give its .sidebar-persistent child (position: fixed) a new containing
    block, pinning it to *this* element instead of the viewport and dragging
-   it along with the drawer, defeating the entire point of it staying put. */
-@media (max-width: 768px) {
+   it along with the drawer, defeating the entire point of it staying put.
+
+   The `max-height: 500px` half of this query matters on its own: most
+   current phones are *wider* than 768px once rotated to landscape (an
+   iPhone 14's landscape width is 844px), so width alone would flip a
+   landscape phone into the permanent side-by-side desktop layout — cramming
+   a whole extra column into a viewport that's only ~390px tall. Catching
+   short viewports too keeps a rotated phone in drawer mode, where there's
+   still only one thing (the globe) to look at by default. */
+@media (max-width: 768px), (max-height: 500px) {
   .sidebar {
     position: fixed;
     /* Normally 0, but iOS pans the visual viewport (without scrolling the
@@ -109,7 +117,7 @@ body {
 
 /* Same visual-viewport pan compensation as the drawer chrome above — placed
    here (after the base rule) so it wins the cascade at equal specificity. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .sidebar-backdrop {
     top: var(--visual-viewport-offset-top, 0px);
   }

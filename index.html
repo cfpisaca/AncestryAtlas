@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `interactive-widget=resizes-content` (Safari 17.4+, Chrome 108+) makes
+         the on-screen keyboard actually shrink the layout viewport instead of
+         just panning the visual viewport out from under it — which is what a
+         `position: fixed` element is pinned to, and why it could otherwise end
+         up positioned above the area that's actually still visible. Without
+         this, fixed UI has to fight the keyboard with JS (see
+         useVisibleViewportHeight.ts), which is unreliable across reflow/
+         rotation edge cases; with it, the browser keeps the layout in sync
+         with the keyboard natively. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <title>Ancestral Atlas</title>
   </head>
   <body>
