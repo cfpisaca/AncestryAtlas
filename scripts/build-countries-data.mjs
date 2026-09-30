@@ -150,10 +150,16 @@
 //    Monaco is the one exception worth calling out: it has a real land
 //    border with France, which *does* go through the main pipeline, so
 //    their shared boundary is no longer guaranteed to align exactly after
-//    this — tested and the gap is sub-kilometer, invisible at the scale
-//    this globe is ever actually viewed at, but it's a real trade-off, not
-//    a free one. The other four are islands with no shared land border
-//    with anything, so there's no such trade-off for them.
+//    this. Initially assumed sub-kilometer and invisible at the scale this
+//    globe is ever actually viewed at — wrong, it showed up as a visible
+//    notch cut into the coastline once zoomed in close, since France's
+//    independently-simplified path and Monaco's raw one only coincide where
+//    the exact same source vertex happened to survive both. weldIntoNeighbor
+//    below fixes it by splicing Monaco's exact intermediate points back into
+//    France's ring for that one short stretch, rather than either paying for
+//    Monaco's full detail on France's side or simplifying Monaco itself. The
+//    other four are islands with no shared land border with anything, so
+//    there's no such trade-off — or fix needed — for them.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -516,6 +522,77 @@ async function rawGeometryFeatures(names) {
   return JSON.parse(cleaned['out.json']).features
 }
 
+const coordKey = ([lng, lat]) => `${lng},${lat}`
+
+// Splices `detailedRing`'s points into `neighborRing` wherever the two share
+// an exact vertex, so a simplified ring gains back whatever detail its
+// raw-geometry neighbor has along their shared border. The two rings wind in
+// opposite directions along any shared edge (standard for adjacent
+// polygons), so between two consecutive shared vertices in `neighborRing`,
+// the matching `detailedRing` sub-path is walked backward — picking
+// whichever direction between the pair is shorter, so a coincidental extra
+// shared vertex elsewhere on the ring can't be mistaken for the near side.
+// Leaves `neighborRing` untouched if the two share fewer than two vertices
+// (nothing to anchor a splice to).
+function weldIntoNeighbor(neighborRing, detailedRing) {
+  const detailedIndexByKey = new Map(detailedRing.map((pt, i) => [coordKey(pt), i]))
+  const anchors = []
+  neighborRing.forEach((pt, i) => {
+    const detailedIdx = detailedIndexByKey.get(coordKey(pt))
+    if (detailedIdx !== undefined) anchors.push({ neighborIdx: i, detailedIdx })
+  })
+  if (anchors.length < 2) return neighborRing
+
+  const detailedLen = detailedRing.length - 1 // ring is closed; last point repeats the first
+  const anchorByNeighborIdx = new Map(anchors.map((a) => [a.neighborIdx, a.detailedIdx]))
+  const result = []
+  for (let i = 0; i < neighborRing.length; i++) {
+    result.push(neighborRing[i])
+    const here = anchorByNeighborIdx.get(i)
+    const next = anchorByNeighborIdx.get(i + 1)
+    if (here === undefined || next === undefined) continue
+    const forwardSteps = (here - next + detailedLen) % detailedLen
+    const backwardSteps = (next - here + detailedLen) % detailedLen
+    const step = forwardSteps <= backwardSteps ? -1 : 1
+    for (let c = (here + step + detailedLen) % detailedLen; c !== next; c = (c + step + detailedLen) % detailedLen) {
+      result.push(detailedRing[c])
+    }
+  }
+  return result
+}
+
+// See part 7 in the header comment above: welds Monaco's exact raw boundary
+// back into France's independently-simplified one along their shared land
+// border, rather than leaving the two to disagree about exactly where it
+// runs. Targets France's largest ring specifically (its mainland) since
+// that's the one Monaco actually touches — its other, disjoint pieces
+// (Corsica, overseas territories merged in via SOVEREIGNTY_OVERRIDES) are
+// untouched.
+function weldMonacoIntoFrance(features) {
+  const monaco = features.find((f) => f.properties.NAME === 'Monaco')
+  const franceIdx = features.findIndex((f) => f.properties.NAME === 'France')
+  if (!monaco || franceIdx === -1) return features
+
+  const france = features[franceIdx]
+  const franceSubPolygons = subPolygonsOf(france.geometry)
+  const franceExteriors = franceSubPolygons.map((rings) => rings[0])
+  const ringArea = (ring) => geoArea({ type: 'Polygon', coordinates: [ring] })
+  const mainlandIdx = franceExteriors.reduce(
+    (best, ring, i, all) => (ringArea(ring) > ringArea(all[best]) ? i : best),
+    0,
+  )
+  const welded = weldIntoNeighbor(franceExteriors[mainlandIdx], monaco.geometry.coordinates[0])
+  const newSubPolygons = franceSubPolygons.map((rings, i) => (i === mainlandIdx ? [welded, ...rings.slice(1)] : rings))
+  const newFrance = {
+    ...france,
+    geometry:
+      france.geometry.type === 'Polygon'
+        ? { type: 'Polygon', coordinates: newSubPolygons[0] }
+        : { type: 'MultiPolygon', coordinates: newSubPolygons },
+  }
+  return features.map((f, i) => (i === franceIdx ? newFrance : f))
+}
+
 // Single-quoted string literals, since the whole expression is itself
 // wrapped in double quotes for mapshaper's own command-line tokenizer
 // (`-each "..."`) — a name with an apostrophe (Côte d'Ivoire) needs that
@@ -592,12 +669,14 @@ const dropped = simplifiedFeatures.filter((f) => !f.geometry).map((f) => f.prope
 const rawGeomByName = new Map(
   (await rawGeometryFeatures(RAW_GEOMETRY_NAMES)).map((f) => [f.properties.NAME, f]),
 )
-const reduced = await simplifyAntarctica([
-  ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)).map(
-    (f) => rawGeomByName.get(f.properties.NAME) ?? f,
-  ),
-  await vaticanCityFeature(),
-])
+const reduced = weldMonacoIntoFrance(
+  await simplifyAntarctica([
+    ...fixOrphanHoles(simplifiedFeatures.filter((f) => f.geometry).map(dropInsignificantIslets)).map(
+      (f) => rawGeomByName.get(f.properties.NAME) ?? f,
+    ),
+    await vaticanCityFeature(),
+  ]),
+)
 
 const ringsBefore = simplifiedFeatures.reduce(
   (sum, f) => sum + (f.geometry ? (f.geometry.type === 'Polygon' ? 1 : f.geometry.coordinates.length) : 0),
