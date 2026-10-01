@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
+import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
 import { HIGHLIGHT_COLOR, useWorldGlobe } from './useWorldGlobe'
 import { useVisibleViewportHeight } from './useVisibleViewportHeight'
@@ -44,7 +45,7 @@ function CapitalsQuiz() {
   const inputRef = useRef<HTMLInputElement>(null)
   const visibleHeight = useVisibleViewportHeight()
 
-  const { countries } = useWorldGlobe({ autoRotate: false })
+  const { containerRef, globeRef, countries, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
 
   const guessableNames = useMemo(
     () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
@@ -129,7 +130,7 @@ function CapitalsQuiz() {
   }, [guessableNames, guessed])
 
   return (
-    <div style={{ width: '100vw', height: visibleHeight, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ width: '100vw', height: visibleHeight, display: 'flex' }}>
       <Sidebar
         persistent={(toggle) => (
           <>
@@ -144,13 +145,7 @@ function CapitalsQuiz() {
               )}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {hasStarted && currentCountry && (
-                <div style={{ padding: '8px 12px', borderRadius: 6, background: 'rgba(255, 255, 255, 0.08)', color: '#e3ece9', textAlign: 'center' }}>
-                  <div style={{ fontSize: 12, color: 'rgba(227, 236, 233, 0.6)', marginBottom: 4 }}>Capital of:</div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{currentCountry}</div>
-                </div>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {hasStarted ? (
                 <input
                   ref={inputRef}
@@ -159,7 +154,7 @@ function CapitalsQuiz() {
                   value={input}
                   onChange={(event) => handleInputChange(event.target.value)}
                   disabled={isInputDisabled}
-                  placeholder="Type the capital..."
+                  placeholder={currentCountry ? `Capital of ${currentCountry}...` : 'Type the capital...'}
                   autoFocus
                   autoComplete="off"
                   autoCorrect="off"
@@ -331,6 +326,10 @@ function CapitalsQuiz() {
           })}
         </>
       </Sidebar>
+      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        <GlobeStatus isLoading={isLoading} loadError={loadError} retry={retry} />
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      </div>
     </div>
   )
 }
