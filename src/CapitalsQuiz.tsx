@@ -81,7 +81,17 @@ function CapitalsQuiz() {
     () => new Map(guessableNames.map((name) => [CAPITALS_BY_COUNTRY[name], name])),
     [guessableNames],
   )
-  const guessLookup = useMemo(() => buildGuessLookup(capitalNames), [capitalNames])
+  const guessLookup = useMemo(() => {
+    const lookup = buildGuessLookup(capitalNames)
+    // "Washington, D.C." normalizes to "washington d c" — the comma and
+    // periods become spaces around each letter, so neither the common
+    // short answer "Washington" nor "Washington DC" would otherwise match.
+    if (countryByCapital.has('Washington, D.C.')) {
+      lookup.set('washington', 'Washington, D.C.')
+      lookup.set('washington dc', 'Washington, D.C.')
+    }
+    return lookup
+  }, [capitalNames, countryByCapital])
 
   useEffect(() => {
     if (!hasStarted || isPaused || isGameOver) return
@@ -361,17 +371,15 @@ function CapitalsQuiz() {
                     <div key={name}>
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 8,
                           padding: '4px 6px 4px 16px',
                           borderRadius: 4,
                           border: !isGameOver && name === lastGuessed ? `1px solid ${HIGHLIGHT_COLOR}` : '1px solid transparent',
-                          color: isGuessed ? '#4ade80' : '#ef4444',
                         }}
                       >
-                        <span>{isGuessed || isGameOver ? CAPITALS_BY_COUNTRY[name] : '?????'}</span>
-                        <span style={{ color: 'rgba(227, 236, 233, 0.5)', fontWeight: 400 }}>{name}</span>
+                        <div style={{ color: isGuessed ? '#4ade80' : '#ef4444' }}>
+                          {isGuessed || isGameOver ? CAPITALS_BY_COUNTRY[name] : '?????'}
+                        </div>
+                        <div style={{ color: 'rgba(227, 236, 233, 0.5)', fontSize: 11 }}>{name}</div>
                       </div>
                     </div>
                   ))}
