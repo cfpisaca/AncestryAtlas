@@ -72,7 +72,7 @@ function GlobeExplorer() {
           onSelect={flyToCountry}
         />
         <Link
-          to="/quiz"
+          to="/"
           style={{
             padding: '8px 14px',
             borderRadius: 8,
@@ -84,7 +84,7 @@ function GlobeExplorer() {
             textAlign: 'center',
           }}
         >
-          Play World Quiz
+          ← Back to Menu
         </Link>
       </Sidebar>
       <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>

@@ -458,7 +458,7 @@ function WorldQuiz() {
                   textAlign: 'center',
                 }}
               >
-                ← Back to Explore
+                ← Back to Menu
               </Link>
             </div>
 
