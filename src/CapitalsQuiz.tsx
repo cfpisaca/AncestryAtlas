@@ -214,7 +214,7 @@ function CapitalsQuiz() {
                   value={input}
                   onChange={(event) => handleInputChange(event.target.value)}
                   disabled={isInputDisabled}
-                  placeholder="Type a capital city..."
+                  placeholder="Type your guess..."
                   autoFocus
                   autoComplete="off"
                   autoCorrect="off"
