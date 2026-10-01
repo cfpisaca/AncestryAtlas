@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { geoCentroid } from 'd3'
 import { Link } from 'react-router-dom'
 import { Color } from 'three'
 import { buildGuessLookup, matchGuess } from './countryAliases'
 import { CONTINENT_BY_COUNTRY, CONTINENT_ORDER, TERRITORY_PARENT, type Continent } from './continents'
 import GlobeStatus from './GlobeStatus'
 import Sidebar from './Sidebar'
-import { HIGHLIGHT_COLOR, useWorldGlobe } from './useWorldGlobe'
+import { altitudeForCountry, HIGHLIGHT_COLOR, LAND_COLOR, useWorldGlobe, type CountryFeature } from './useWorldGlobe'
 import { useVisibleViewportHeight } from './useVisibleViewportHeight'
 import { CAPITALS_BY_COUNTRY } from './capitals'
 
 const GUESSED_COLOR = new Color('#4ade80')
 const MISSED_COLOR = new Color('#ef4444')
 const GAME_DURATION_SECONDS = 15 * 60
+
+const CONTINENT_COLOR: Record<Continent, string> = {
+  Africa: '#c084fc',
+  Asia: '#f87171',
+  Europe: '#60a5fa',
+  'North America': '#fb923c',
+  Oceania: '#22d3ee',
+  'South America': '#4ade80',
+}
 
 const PARENT_LABEL_TO_COUNTRY: Record<string, string> = {
   US: 'United States of America',
@@ -45,16 +55,33 @@ function CapitalsQuiz() {
   const inputRef = useRef<HTMLInputElement>(null)
   const visibleHeight = useVisibleViewportHeight()
 
-  const { containerRef, globeRef, countries, isLoading, loadError, retry } = useWorldGlobe({ autoRotate: false })
+  const { containerRef, globeRef, countries, paintCountry, highlightCountry, isLoading, loadError, retry } = useWorldGlobe({
+    autoRotate: false,
+  })
 
   const guessableNames = useMemo(
-    () => countries.map((c) => c.properties.NAME).filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT)),
+    () =>
+      countries
+        .map((c) => c.properties.NAME)
+        .filter((name) => name in CONTINENT_BY_COUNTRY && !(name in TERRITORY_PARENT) && name in CAPITALS_BY_COUNTRY),
     [countries],
   )
+  const countryByName = useMemo(() => new Map(countries.map((c) => [c.properties.NAME, c])), [countries])
 
   const isComplete = guessed.size > 0 && guessed.size === guessableNames.length
   const isGameOver = hasGivenUp || secondsLeft <= 0 || isComplete
-  const guessLookup = useMemo(() => buildGuessLookup(guessableNames), [guessableNames])
+
+  // Guesses are capital names, not country names — the input needs to match
+  // against "Paris", not "France". countryByCapital resolves a matched
+  // capital back to the country it belongs to so the rest of the game state
+  // (guessed set, continent grouping) can keep tracking countries the same
+  // way WorldQuiz does.
+  const capitalNames = useMemo(() => guessableNames.map((name) => CAPITALS_BY_COUNTRY[name]), [guessableNames])
+  const countryByCapital = useMemo(
+    () => new Map(guessableNames.map((name) => [CAPITALS_BY_COUNTRY[name], name])),
+    [guessableNames],
+  )
+  const guessLookup = useMemo(() => buildGuessLookup(capitalNames), [capitalNames])
 
   useEffect(() => {
     if (!hasStarted || isPaused || isGameOver) return
@@ -66,18 +93,46 @@ function CapitalsQuiz() {
     if (hasStarted) inputRef.current?.focus()
   }, [hasStarted])
 
+  useEffect(() => {
+    if (!isGameOver) return
+    for (const name of guessableNames) {
+      if (guessed.has(name)) continue
+      paintCountry(name, MISSED_COLOR)
+      for (const territory of TERRITORIES_BY_COUNTRY[name] ?? []) paintCountry(territory, MISSED_COLOR)
+    }
+  }, [isGameOver, guessableNames, guessed, paintCountry])
+
   const handleInputChange = (value: string) => {
     setInput(value)
-    const match = matchGuess(guessLookup, value)
-    if (!match || guessed.has(match)) return
+    const matchedCapital = matchGuess(guessLookup, value)
+    const country = matchedCapital ? countryByCapital.get(matchedCapital) : undefined
+    if (!country || guessed.has(country)) return
 
-    setGuessed((prev) => new Set(prev).add(match))
-    setLastGuessed(match)
-    setExpandedContinent(CONTINENT_BY_COUNTRY[match])
+    setGuessed((prev) => new Set(prev).add(country))
+    setLastGuessed(country)
+    paintCountry(country, GUESSED_COLOR)
+    const territoryNames = TERRITORIES_BY_COUNTRY[country] ?? []
+    for (const territory of territoryNames) paintCountry(territory, GUESSED_COLOR)
+    setExpandedContinent(CONTINENT_BY_COUNTRY[country])
+    const globe = globeRef.current
+    const feature = countryByName.get(country)
+    if (globe && feature) {
+      const [lng, lat] = geoCentroid(feature)
+      globe.pointOfView({ lat, lng, altitude: altitudeForCountry(feature) }, 1200)
+    }
+    const territoryFeatures = territoryNames
+      .map((name) => countryByName.get(name))
+      .filter((f): f is CountryFeature => f !== undefined)
+    highlightCountry(feature ? [feature, ...territoryFeatures] : territoryFeatures)
     setInput('')
   }
 
   const restart = () => {
+    for (const name of guessableNames) {
+      paintCountry(name, LAND_COLOR)
+      for (const territory of TERRITORIES_BY_COUNTRY[name] ?? []) paintCountry(territory, LAND_COLOR)
+    }
+    highlightCountry(null)
     setGuessed(new Set())
     setInput('')
     setSecondsLeft(GAME_DURATION_SECONDS)
@@ -124,11 +179,6 @@ function CapitalsQuiz() {
 
   const isInputDisabled = !hasStarted || isPaused || isGameOver
 
-  const currentCountry = useMemo(() => {
-    const notGuessed = guessableNames.find((name) => !guessed.has(name))
-    return notGuessed ?? null
-  }, [guessableNames, guessed])
-
   return (
     <div style={{ width: '100vw', height: visibleHeight, display: 'flex' }}>
       <Sidebar
@@ -154,7 +204,7 @@ function CapitalsQuiz() {
                   value={input}
                   onChange={(event) => handleInputChange(event.target.value)}
                   disabled={isInputDisabled}
-                  placeholder={currentCountry ? `Capital of ${currentCountry}...` : 'Type the capital...'}
+                  placeholder="Type a capital city..."
                   autoFocus
                   autoComplete="off"
                   autoCorrect="off"
@@ -300,7 +350,7 @@ function CapitalsQuiz() {
                     fontFamily: 'inherit',
                   }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#60a5fa', flexShrink: 0 }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: CONTINENT_COLOR[continent], flexShrink: 0 }} />
                   <span style={{ flex: 1 }}>
                     {continent} {progress ? `${progress.guessedCount}/${progress.total}` : ''}
                   </span>
@@ -311,13 +361,17 @@ function CapitalsQuiz() {
                     <div key={name}>
                       <div
                         style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 8,
                           padding: '4px 6px 4px 16px',
                           borderRadius: 4,
                           border: !isGameOver && name === lastGuessed ? `1px solid ${HIGHLIGHT_COLOR}` : '1px solid transparent',
                           color: isGuessed ? '#4ade80' : '#ef4444',
                         }}
                       >
-                        {name}
+                        <span>{isGuessed || isGameOver ? CAPITALS_BY_COUNTRY[name] : '?????'}</span>
+                        <span style={{ color: 'rgba(227, 236, 233, 0.5)', fontWeight: 400 }}>{name}</span>
                       </div>
                     </div>
                   ))}
