@@ -5,9 +5,9 @@ import './index.css'
 import App from './App.tsx'
 
 // HashRouter, not BrowserRouter: GitHub Pages serves static files with no
-// server-side rewrite rules, so a direct load or refresh on /quiz would 404
-// with path-based routing. Hash-based routes (/#/quiz) never hit the server
-// for the route itself.
+// server-side rewrite rules, so a direct load or refresh on /countries would
+// 404 with path-based routing. Hash-based routes (/#/countries) never hit
+// the server for the route itself.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>

@@ -25,7 +25,7 @@ function Menu() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 400, width: '100%' }}>
         <Link
-          to="/quiz"
+          to="/countries"
           style={{
             padding: '20px',
             borderRadius: 12,
