@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { geoNaturalEarth1, geoPath, select, zoom, zoomIdentity, type ZoomTransform } from 'd3'
+import { geoNaturalEarth1, geoPath, select, zoom, zoomIdentity } from 'd3'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import { Link } from 'react-router-dom'
@@ -14,10 +14,17 @@ const OCEAN_COLOR = '#0b1f2e'
 const LAND_COLOR = '#143347'
 const BORDER_COLOR = 'rgba(227, 236, 233, 0.25)'
 
+// Projection/path only depend on WIDTH/HEIGHT, which never change, so build
+// them once at module scope instead of on every render — recomputing a
+// geoPath for ~177 countries on every zoom/pan tick is what was causing lag.
+const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], { type: 'Sphere' })
+const path = geoPath(projection)
+const SPHERE_PATH = path({ type: 'Sphere' }) ?? undefined
+
 function EmptyMap2D() {
   const [countries, setCountries] = useState<CountryFeature[]>([])
-  const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
   const svgRef = useRef<SVGSVGElement>(null)
+  const groupRef = useRef<SVGGElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -40,20 +47,24 @@ function EmptyMap2D() {
   // Wheel to zoom, drag to pan — mirrors the 3D globe's built-in orbit
   // controls so the two prototypes are a fair comparison. Scale is capped
   // at 1x min (can't zoom out past the default fit) and 8x max.
+  //
+  // The transform is applied straight to the <g> DOM node instead of going
+  // through React state, so dragging/zooming never triggers a re-render —
+  // that was the other source of lag (177 path elements re-rendering per tick).
   useEffect(() => {
     const svg = svgRef.current
-    if (!svg) return
+    const group = groupRef.current
+    if (!svg || !group) return
     const behavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([1, 8])
-      .on('zoom', (event) => setTransform(event.transform))
+      .on('zoom', (event) => {
+        group.setAttribute('transform', event.transform.toString())
+      })
     select(svg).call(behavior)
     return () => {
       select(svg).on('.zoom', null)
     }
   }, [])
-
-  const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], { type: 'Sphere' })
-  const path = geoPath(projection)
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', background: OCEAN_COLOR }}>
@@ -76,8 +87,8 @@ function EmptyMap2D() {
         ← Back to Menu
       </Link>
       <svg ref={svgRef} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: '100%', height: '100%', cursor: 'grab' }}>
-        <g transform={transform.toString()}>
-          <path d={path({ type: 'Sphere' }) ?? undefined} fill={OCEAN_COLOR} />
+        <g ref={groupRef} transform={zoomIdentity.toString()}>
+          <path d={SPHERE_PATH} fill={OCEAN_COLOR} />
           {countries.map((country) => (
             <path
               key={country.properties.NAME}
