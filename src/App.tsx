@@ -4,6 +4,7 @@ import CapitalsQuiz from './CapitalsQuiz'
 import ClickQuiz from './ClickQuiz'
 import GlobeExplorer from './GlobeExplorer'
 import Menu from './Menu'
+import USMapPrototype from './USMapPrototype'
 import WorldQuiz from './WorldQuiz'
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
       <Route path="/explore" element={<GlobeExplorer />} />
       <Route path="/click" element={<ClickQuiz />} />
       <Route path="/blank" element={<BlankMapPrototype />} />
+      <Route path="/us-blank" element={<USMapPrototype />} />
     </Routes>
   )
 }

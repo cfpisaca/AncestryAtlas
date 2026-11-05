@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "data:countries": "node scripts/build-countries-data.mjs",
+    "data:us-states": "cp node_modules/us-atlas/states-10m.json public/data/us-states.json",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
     "mapshaper": "^0.7.61",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
+    "us-atlas": "^3.0.1",
     "vite": "^8.3.0"
   }
 }

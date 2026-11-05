@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath, select, zoom, zoomIdentity } from 'd3'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
@@ -26,45 +26,6 @@ const BORDER_COLOR = 'rgba(227, 236, 233, 0.25)'
 const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], { type: 'Sphere' })
 const path = geoPath(projection)
 const SPHERE_PATH = path({ type: 'Sphere' }) ?? undefined
-
-// JetPunk's trick for micro-states (Nauru, Tuvalu, etc.): their actual
-// projected shape is only a pixel or so across at this scale — effectively
-// unclickable — so anything with a total projected area under this (in
-// viewBox px², at the default un-zoomed scale) gets an oversized circle
-// "blob" at its centroid, rendered underneath its real path, purely as a
-// bigger click target. The real coastline still renders on top of it, same
-// as before, so this only changes clickability, not how the map looks
-// beyond that faint circle.
-//
-// Area, not bounding-box size, is what decides this — a bounding box alone
-// mistakes "spread out" for "big": Tuvalu/Marshall Islands/Kiribati are
-// scattered atolls whose combined bounding box spans a huge chunk of the
-// Pacific (Kiribati's crosses the antimeridian and is 1248px wide) even
-// though every individual island inside is sub-pixel. Measured against real
-// country areas (Nauru/Tuvalu/Kiribati cluster under ~1.2px², Comoros and
-// up are 2px²+ and have an actually-clickable landmass), 1.5 sits in the
-// gap between them.
-const MIN_CLICKABLE_AREA = 1.5
-const BLOB_RADIUS = 6
-const BLOB_COLOR = 'rgba(227, 236, 233, 0.18)'
-
-// A scattered country's own centroid (area-weighted across every island) can
-// land in open ocean between its parts — useless as a click target. Placing
-// the blob on the single largest part's centroid instead always lands on
-// (or very near) actual land.
-function largestPartCentroid(country: CountryFeature): [number, number] {
-  if (country.geometry.type === 'Polygon') return path.centroid(country)
-  let bestArea = -1
-  let bestCoordinates: (typeof country.geometry.coordinates)[number] | null = null
-  for (const coordinates of country.geometry.coordinates) {
-    const area = Math.abs(path.area({ type: 'Polygon', coordinates }))
-    if (area > bestArea) {
-      bestArea = area
-      bestCoordinates = coordinates
-    }
-  }
-  return bestCoordinates ? path.centroid({ type: 'Polygon', coordinates: bestCoordinates }) : path.centroid(country)
-}
 
 interface WorldMap2DProps {
   // Fired once, the first time the country data finishes loading — lets a
@@ -139,19 +100,6 @@ function WorldMap2D({ onCountriesLoaded, onCountryClick, countryFill }: WorldMap
     }
   }, [])
 
-  // Only worth computing (and only rendered) when clicks actually matter —
-  // the blank sandbox has nothing to click, so it stays exactly as before.
-  const clickTargetBlobs = useMemo(() => {
-    if (!onCountryClick) return []
-    return countries.flatMap((country) => {
-      const area = Math.abs(path.area(country))
-      if (!Number.isFinite(area) || area >= MIN_CLICKABLE_AREA) return []
-      const [cx, cy] = largestPartCentroid(country)
-      if (!Number.isFinite(cx) || !Number.isFinite(cy)) return []
-      return [{ name: country.properties.NAME, cx, cy }]
-    })
-  }, [countries, onCountryClick])
-
   return (
     <svg
       ref={svgRef}
@@ -160,18 +108,6 @@ function WorldMap2D({ onCountriesLoaded, onCountryClick, countryFill }: WorldMap
     >
       <g ref={groupRef} transform={zoomIdentity.toString()}>
         <path d={SPHERE_PATH} fill={OCEAN_COLOR} />
-        {clickTargetBlobs.map(({ name, cx, cy }) => (
-          <circle
-            key={`blob-${name}`}
-            data-country={name}
-            cx={cx}
-            cy={cy}
-            r={BLOB_RADIUS}
-            fill={countryFill?.(name) ?? BLOB_COLOR}
-            onClick={() => onCountryClick?.(name)}
-            style={{ cursor: 'pointer' }}
-          />
-        ))}
         {countries.map((country) => {
           const name = country.properties.NAME
           return (
