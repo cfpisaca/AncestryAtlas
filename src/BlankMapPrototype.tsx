@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import EmptyGlobe from './EmptyGlobe'
-import EmptyMap2D from './EmptyMap2D'
+import EmptyMap2D, { MAP_ASPECT_RATIO } from './EmptyMap2D'
 
 type ViewMode = '3d' | '2d'
 
@@ -56,7 +56,7 @@ function BlankMapPrototype() {
         style={{
           width: '90%',
           maxWidth: 1100,
-          aspectRatio: '16 / 9',
+          aspectRatio: MAP_ASPECT_RATIO,
           borderRadius: 12,
           border: '1px solid rgba(255, 255, 255, 0.2)',
           background: 'rgba(255, 255, 255, 0.08)',

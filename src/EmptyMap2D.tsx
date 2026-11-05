@@ -5,7 +5,14 @@ import type { GeometryCollection, Topology } from 'topojson-specification'
 import type { CountryFeature } from './useWorldGlobe'
 
 const WIDTH = 1280
-const HEIGHT = 720
+// geoNaturalEarth1's projected sphere outline isn't 16:9 — it's ~1.923:1
+// (measured via fitSize into a large square and reading back the bounds).
+// Matching the box's own aspect ratio to that exactly, instead of an
+// arbitrary 16:9, is what makes fitSize touch all four edges with zero
+// leftover letterboxing — exported as MAP_ASPECT_RATIO below so
+// BlankMapPrototype's box always matches, however this changes.
+const HEIGHT = 666
+export const MAP_ASPECT_RATIO = `${WIDTH} / ${HEIGHT}`
 
 // Same ocean/land colors as EmptyGlobe's blank state, so both prototypes
 // read as the same visual "blank slate" concept, just flat vs. 3D.
