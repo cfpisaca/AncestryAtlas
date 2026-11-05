@@ -1,3 +1,5 @@
+import { buildGuessLookup as buildLookup, matchGuess } from './guessMatching'
+
 // Common alternate names/spellings accepted alongside each country's
 // canonical name in the world quiz. Not exhaustive — covers well-known
 // short names, former names, and common misspellings; easy to extend.
@@ -52,28 +54,8 @@ export const COUNTRY_ALIASES: Record<string, string> = {
   holland: 'Netherlands',
 }
 
-function normalize(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-}
-
-// Maps every normalized guessable name and known alias to its canonical
-// name, so matching user input is a single lookup rather than a scan.
 export function buildGuessLookup(guessableNames: string[]): Map<string, string> {
-  const lookup = new Map<string, string>()
-  for (const name of guessableNames) lookup.set(normalize(name), name)
-  for (const [alias, canonical] of Object.entries(COUNTRY_ALIASES)) {
-    if (guessableNames.includes(canonical)) lookup.set(normalize(alias), canonical)
-  }
-  return lookup
+  return buildLookup(guessableNames, COUNTRY_ALIASES)
 }
 
-export function matchGuess(lookup: Map<string, string>, input: string): string | undefined {
-  const normalized = normalize(input)
-  if (!normalized) return undefined
-  return lookup.get(normalized)
-}
+export { matchGuess }

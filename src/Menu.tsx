@@ -15,6 +15,7 @@ const GAME_MODES: GameMode[] = [
   { to: '/click', icon: '🎯', title: 'Click Quiz', description: 'Click the right country' },
   { to: '/blank', icon: '🧪', title: 'Blank', description: 'Prototype sandbox' },
   { to: '/us-blank', icon: '🇺🇸', title: 'US States', description: 'Prototype sandbox' },
+  { to: '/nba', icon: '🏀', title: 'NBA Teams', description: 'Name all 30 NBA teams' },
 ]
 
 function ModeCard({ to, icon, title, description }: GameMode) {
