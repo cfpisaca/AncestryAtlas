@@ -12,6 +12,7 @@ const GAME_MODES: GameMode[] = [
   { to: '/countries', icon: '🌍', title: 'Countries', description: 'Guess all 197 countries' },
   { to: '/capitals', icon: '🏛️', title: 'Capitals', description: 'Guess capital cities' },
   { to: '/explore', icon: '🔍', title: 'Explore', description: 'Browse the world map' },
+  { to: '/blank', icon: '🧪', title: 'Blank', description: 'Prototype sandbox' },
 ]
 
 function ModeCard({ to, icon, title, description }: GameMode) {
