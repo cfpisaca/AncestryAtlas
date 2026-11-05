@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import BlankMapPrototype from './BlankMapPrototype'
 import CapitalsQuiz from './CapitalsQuiz'
+import ClickQuiz from './ClickQuiz'
 import GlobeExplorer from './GlobeExplorer'
 import Menu from './Menu'
 import WorldQuiz from './WorldQuiz'
@@ -12,6 +13,7 @@ function App() {
       <Route path="/countries" element={<WorldQuiz />} />
       <Route path="/capitals" element={<CapitalsQuiz />} />
       <Route path="/explore" element={<GlobeExplorer />} />
+      <Route path="/click" element={<ClickQuiz />} />
       <Route path="/blank" element={<BlankMapPrototype />} />
     </Routes>
   )

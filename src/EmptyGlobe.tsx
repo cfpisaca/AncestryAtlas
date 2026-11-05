@@ -14,7 +14,7 @@ interface EmptyGlobeProps {
 
 // Fills whatever box its parent gives it — BlankMapPrototype owns the page
 // chrome (back link, mode toggle, the bounded box itself) so this and
-// EmptyMap2D can be swapped inside it.
+// WorldMap2D can be swapped inside it.
 function EmptyGlobe({ active = true }: EmptyGlobeProps) {
   const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({
     autoRotate: false,

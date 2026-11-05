@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import EmptyGlobe from './EmptyGlobe'
-import EmptyMap2D, { MAP_ASPECT_RATIO } from './EmptyMap2D'
+import WorldMap2D, { MAP_ASPECT_RATIO } from './WorldMap2D'
 
 type ViewMode = '3d' | '2d'
 
@@ -67,7 +67,7 @@ function BlankMapPrototype() {
           <EmptyGlobe active={mode === '3d'} />
         </div>
         <div style={{ width: '100%', height: '100%', display: mode === '2d' ? 'block' : 'none' }}>
-          <EmptyMap2D />
+          <WorldMap2D />
         </div>
       </div>
     </div>

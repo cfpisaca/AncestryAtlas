@@ -9,13 +9,13 @@ const WIDTH = 1280
 // (measured via fitSize into a large square and reading back the bounds).
 // Matching the box's own aspect ratio to that exactly, instead of an
 // arbitrary 16:9, is what makes fitSize touch all four edges with zero
-// leftover letterboxing — exported as MAP_ASPECT_RATIO below so
-// BlankMapPrototype's box always matches, however this changes.
+// leftover letterboxing — exported as MAP_ASPECT_RATIO so any page placing
+// this in a box can match it.
 const HEIGHT = 666
 export const MAP_ASPECT_RATIO = `${WIDTH} / ${HEIGHT}`
 
-// Same ocean/land colors as EmptyGlobe's blank state, so both prototypes
-// read as the same visual "blank slate" concept, just flat vs. 3D.
+// Same ocean/land colors as EmptyGlobe's blank state, so a plain (no-props)
+// render of this still reads as the same "blank slate" concept.
 const OCEAN_COLOR = '#0b1f2e'
 const LAND_COLOR = '#143347'
 const BORDER_COLOR = 'rgba(227, 236, 233, 0.25)'
@@ -27,13 +27,29 @@ const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], { type: 'Sphere' 
 const path = geoPath(projection)
 const SPHERE_PATH = path({ type: 'Sphere' }) ?? undefined
 
-// Fills whatever box its parent gives it — BlankMapPrototype owns the page
-// chrome (back link, mode toggle, the bounded box itself) so this and
-// EmptyGlobe can be swapped inside it.
-function EmptyMap2D() {
+interface WorldMap2DProps {
+  // Fired once, the first time the country data finishes loading — lets a
+  // caller (e.g. a click-quiz) build its own guessable-names pool without
+  // this component needing to know anything about quiz logic itself.
+  onCountriesLoaded?: (countries: CountryFeature[]) => void
+  onCountryClick?: (name: string) => void
+  // Per-country fill override. Falls back to the default LAND_COLOR for any
+  // name it doesn't return a color for (or when the prop itself is omitted).
+  countryFill?: (name: string) => string | undefined
+}
+
+// Fills whatever box its parent gives it, at the fixed WIDTH:HEIGHT ratio
+// above (the box should match MAP_ASPECT_RATIO, or the SVG will letterbox
+// inside it). With no props this is just a static blank map, same as
+// before; onCountryClick/countryFill are what turn it into something
+// interactive (e.g. ClickQuiz) without duplicating the projection/zoom/pan
+// plumbing in a second component.
+function WorldMap2D({ onCountriesLoaded, onCountryClick, countryFill }: WorldMap2DProps) {
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const svgRef = useRef<SVGSVGElement>(null)
   const groupRef = useRef<SVGGElement>(null)
+  const onCountriesLoadedRef = useRef(onCountriesLoaded)
+  onCountriesLoadedRef.current = onCountriesLoaded
 
   useEffect(() => {
     let cancelled = false
@@ -42,7 +58,9 @@ function EmptyMap2D() {
       .then((topology: Topology) => {
         if (cancelled) return
         const collection = feature(topology, topology.objects.countries as GeometryCollection)
-        setCountries(collection.features as CountryFeature[])
+        const loaded = collection.features as CountryFeature[]
+        setCountries(loaded)
+        onCountriesLoadedRef.current?.(loaded)
       })
       .catch(() => {
         // Prototype route — a failed fetch just leaves the map empty,
@@ -90,19 +108,25 @@ function EmptyMap2D() {
     >
       <g ref={groupRef} transform={zoomIdentity.toString()}>
         <path d={SPHERE_PATH} fill={OCEAN_COLOR} />
-        {countries.map((country) => (
-          <path
-            key={country.properties.NAME}
-            d={path(country) ?? undefined}
-            fill={LAND_COLOR}
-            stroke={BORDER_COLOR}
-            strokeWidth={0.5}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
+        {countries.map((country) => {
+          const name = country.properties.NAME
+          return (
+            <path
+              key={name}
+              data-country={name}
+              d={path(country) ?? undefined}
+              fill={countryFill?.(name) ?? LAND_COLOR}
+              stroke={BORDER_COLOR}
+              strokeWidth={0.5}
+              vectorEffect="non-scaling-stroke"
+              onClick={onCountryClick ? () => onCountryClick(name) : undefined}
+              style={onCountryClick ? { cursor: 'pointer' } : undefined}
+            />
+          )
+        })}
       </g>
     </svg>
   )
 }
 
-export default EmptyMap2D
+export default WorldMap2D
