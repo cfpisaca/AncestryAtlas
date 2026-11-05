@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { geoNaturalEarth1, geoPath } from 'd3'
+import { useEffect, useRef, useState } from 'react'
+import { geoNaturalEarth1, geoPath, select, zoom, zoomIdentity, type ZoomTransform } from 'd3'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 import { Link } from 'react-router-dom'
@@ -16,6 +16,8 @@ const BORDER_COLOR = 'rgba(227, 236, 233, 0.25)'
 
 function EmptyMap2D() {
   const [countries, setCountries] = useState<CountryFeature[]>([])
+  const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -32,6 +34,21 @@ function EmptyMap2D() {
       })
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // Wheel to zoom, drag to pan — mirrors the 3D globe's built-in orbit
+  // controls so the two prototypes are a fair comparison. Scale is capped
+  // at 1x min (can't zoom out past the default fit) and 8x max.
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    const behavior = zoom<SVGSVGElement, unknown>()
+      .scaleExtent([1, 8])
+      .on('zoom', (event) => setTransform(event.transform))
+    select(svg).call(behavior)
+    return () => {
+      select(svg).on('.zoom', null)
     }
   }, [])
 
@@ -58,17 +75,20 @@ function EmptyMap2D() {
       >
         ← Back to Menu
       </Link>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: '100%', height: '100%' }}>
-        <path d={path({ type: 'Sphere' }) ?? undefined} fill={OCEAN_COLOR} />
-        {countries.map((country) => (
-          <path
-            key={country.properties.NAME}
-            d={path(country) ?? undefined}
-            fill={LAND_COLOR}
-            stroke={BORDER_COLOR}
-            strokeWidth={0.5}
-          />
-        ))}
+      <svg ref={svgRef} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: '100%', height: '100%', cursor: 'grab' }}>
+        <g transform={transform.toString()}>
+          <path d={path({ type: 'Sphere' }) ?? undefined} fill={OCEAN_COLOR} />
+          {countries.map((country) => (
+            <path
+              key={country.properties.NAME}
+              d={path(country) ?? undefined}
+              fill={LAND_COLOR}
+              stroke={BORDER_COLOR}
+              strokeWidth={0.5}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </g>
       </svg>
     </div>
   )
