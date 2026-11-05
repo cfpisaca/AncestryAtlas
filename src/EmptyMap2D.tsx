@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath, select, zoom, zoomIdentity } from 'd3'
 import { feature } from 'topojson-client'
 import type { GeometryCollection, Topology } from 'topojson-specification'
-import { Link } from 'react-router-dom'
 import type { CountryFeature } from './useWorldGlobe'
 
 const WIDTH = 1280
@@ -21,6 +20,9 @@ const projection = geoNaturalEarth1().fitSize([WIDTH, HEIGHT], { type: 'Sphere' 
 const path = geoPath(projection)
 const SPHERE_PATH = path({ type: 'Sphere' }) ?? undefined
 
+// Fills whatever box its parent gives it — BlankMapPrototype owns the page
+// chrome (back link, mode toggle, the bounded box itself) so this and
+// EmptyGlobe can be swapped inside it.
 function EmptyMap2D() {
   const [countries, setCountries] = useState<CountryFeature[]>([])
   const svgRef = useRef<SVGSVGElement>(null)
@@ -67,41 +69,25 @@ function EmptyMap2D() {
   }, [])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', background: OCEAN_COLOR }}>
-      <Link
-        to="/"
-        style={{
-          position: 'absolute',
-          top: 16,
-          left: 16,
-          zIndex: 10,
-          padding: '8px 14px',
-          borderRadius: 8,
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          background: 'rgba(10, 19, 18, 0.85)',
-          color: '#e3ece9',
-          fontSize: 14,
-          textDecoration: 'none',
-        }}
-      >
-        ← Back to Menu
-      </Link>
-      <svg ref={svgRef} viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: '100%', height: '100%', cursor: 'grab' }}>
-        <g ref={groupRef} transform={zoomIdentity.toString()}>
-          <path d={SPHERE_PATH} fill={OCEAN_COLOR} />
-          {countries.map((country) => (
-            <path
-              key={country.properties.NAME}
-              d={path(country) ?? undefined}
-              fill={LAND_COLOR}
-              stroke={BORDER_COLOR}
-              strokeWidth={0.5}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </g>
-      </svg>
-    </div>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      style={{ width: '100%', height: '100%', background: OCEAN_COLOR, cursor: 'grab', display: 'block' }}
+    >
+      <g ref={groupRef} transform={zoomIdentity.toString()}>
+        <path d={SPHERE_PATH} fill={OCEAN_COLOR} />
+        {countries.map((country) => (
+          <path
+            key={country.properties.NAME}
+            d={path(country) ?? undefined}
+            fill={LAND_COLOR}
+            stroke={BORDER_COLOR}
+            strokeWidth={0.5}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </g>
+    </svg>
   )
 }
 
