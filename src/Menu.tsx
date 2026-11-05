@@ -14,6 +14,7 @@ const GAME_MODES: GameMode[] = [
   { to: '/explore', icon: '🔍', title: 'Explore', description: 'Browse the world map' },
   { to: '/click', icon: '🎯', title: 'Click Quiz', description: 'Click the right country' },
   { to: '/blank', icon: '🧪', title: 'Blank', description: 'Prototype sandbox' },
+  { to: '/us-blank', icon: '🇺🇸', title: 'US States', description: 'Prototype sandbox' },
 ]
 
 function ModeCard({ to, icon, title, description }: GameMode) {
