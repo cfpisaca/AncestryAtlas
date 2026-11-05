@@ -50,6 +50,11 @@ function EmptyMap2D() {
   // controls so the two prototypes are a fair comparison. Scale is capped
   // at 1x min (can't zoom out past the default fit) and 8x max.
   //
+  // translateExtent + extent both set to the map's own [0,0]-[WIDTH,HEIGHT]
+  // bounds clamps panning the same way e.g. Google Maps does: the content
+  // can never be dragged far enough to show empty space past its edges, so
+  // it can't be panned out of the box it's sitting in.
+  //
   // The transform is applied straight to the <g> DOM node instead of going
   // through React state, so dragging/zooming never triggers a re-render —
   // that was the other source of lag (177 path elements re-rendering per tick).
@@ -59,6 +64,8 @@ function EmptyMap2D() {
     if (!svg || !group) return
     const behavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([1, 8])
+      .translateExtent([[0, 0], [WIDTH, HEIGHT]])
+      .extent([[0, 0], [WIDTH, HEIGHT]])
       .on('zoom', (event) => {
         group.setAttribute('transform', event.transform.toString())
       })

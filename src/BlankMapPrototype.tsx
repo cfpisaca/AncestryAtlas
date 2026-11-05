@@ -64,7 +64,7 @@ function BlankMapPrototype() {
         }}
       >
         <div style={{ width: '100%', height: '100%', display: mode === '3d' ? 'block' : 'none' }}>
-          <EmptyGlobe />
+          <EmptyGlobe active={mode === '3d'} />
         </div>
         <div style={{ width: '100%', height: '100%', display: mode === '2d' ? 'block' : 'none' }}>
           <EmptyMap2D />
