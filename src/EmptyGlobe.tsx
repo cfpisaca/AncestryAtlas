@@ -16,7 +16,9 @@ interface EmptyGlobeProps {
 // chrome (back link, mode toggle, the bounded box itself) so this and
 // EmptyMap2D can be swapped inside it.
 function EmptyGlobe({ active = true }: EmptyGlobeProps) {
-  const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe()
+  const { containerRef, globeRef, countries, paintCountry, isLoading, loadError, retry } = useWorldGlobe({
+    autoRotate: false,
+  })
 
   useEffect(() => {
     for (const country of countries) paintCountry(country.properties.NAME, OCEAN_COLOR)
