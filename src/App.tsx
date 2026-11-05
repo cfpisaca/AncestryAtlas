@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import CapitalsQuiz from './CapitalsQuiz'
 import EmptyGlobe from './EmptyGlobe'
+import EmptyMap2D from './EmptyMap2D'
 import GlobeExplorer from './GlobeExplorer'
 import Menu from './Menu'
 import WorldQuiz from './WorldQuiz'
@@ -13,6 +14,7 @@ function App() {
       <Route path="/capitals" element={<CapitalsQuiz />} />
       <Route path="/explore" element={<GlobeExplorer />} />
       <Route path="/blank" element={<EmptyGlobe />} />
+      <Route path="/blank-2d" element={<EmptyMap2D />} />
     </Routes>
   )
 }
